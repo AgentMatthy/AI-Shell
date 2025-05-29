@@ -1,0 +1,71 @@
+# AI Agent Configuration File
+# This file contains all the configuration settings for the AI terminal assistant
+
+# API Configuration
+api:
+  url: "https://openrouter.ai/api/v1"  # OpenRouter API endpoint
+  api_key: "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"  # Your API key
+
+# Models Configuration
+models:
+  default: "claude"  # Default model alias to use on startup
+  
+  # Available models with aliases for easy switching
+  available:
+    # Free models - no cost per request
+    maverick:
+      name: "meta-llama/llama-4-maverick:free"
+      alias: "maverick"
+      display_name: "Llama 4 Maverick"
+    qwen:
+      name: "qwen/qwen3-235b-a22b:free"
+      alias: "qwen"
+      display_name: "Qwen 3 235B"
+    deepseek:
+      name: "deepseek/deepseek-chat-v3-0324:free"
+      alias: "deepseek"
+      display_name: "DeepSeek Chat V3"
+    hermes:
+      name: "nousresearch/deephermes-3-mistral-24b-preview:free"
+      alias: "hermes"
+      display_name: "DeepHermes 3"
+    scout:
+      name: "meta-llama/llama-4-scout:free"
+      alias: "scout"
+      display_name: "Llama 4 Scout"
+    gemini:
+      name: "google/gemini-2.0-flash-exp:free"
+      alias: "gemini"
+      display_name: "Gemini 2.0 Flash"
+    
+    # Paid models - higher quality but cost per request
+    gemini-lite:
+      name: "google/gemini-2.0-flash-lite-001"
+      alias: "gemini-lite"
+      display_name: "Gemini 2.0 Flash Lite"
+    grok:
+      name: "x-ai/grok-3-mini-beta"
+      alias: "grok"
+      display_name: "Grok 3 Mini"
+    gemini-25:
+      name: "google/gemini-2.5-flash-preview-05-20"
+      alias: "gemini-25"
+      display_name: "Gemini 2.5 Flash"
+    hermes-405b:
+      name: "nousresearch/hermes-3-llama-3.1-405b"
+      alias: "hermes-405b"
+      display_name: "Hermes 3 405B"
+    claude:
+      name: "anthropic/claude-3.5-haiku"
+      alias: "claude"
+      display_name: "Claude 3.5 Haiku"
+    claude-3:
+      name: "anthropic/claude-3-haiku"
+      alias: "claude-3"
+      display_name: "Claude 3 Haiku"
+
+# Application Settings
+settings:
+  max_retries: 10  # Maximum number of retry attempts for failed commands
+  payload_truncate_length: 500  # Length to truncate long messages in payload display
+  default_mode: "ai"  # Default mode: "ai" for AI assistance, "direct" for direct command execution
