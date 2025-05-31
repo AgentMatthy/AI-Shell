@@ -34,22 +34,47 @@ def load_config(config_path="config.yaml"):
         
         # Handle both old and new config formats
         if "models" in config:
-            # New multi-model format
-            required_fields = ["api.url", "api.api_key", "models.default"]
-            for field in required_fields:
-                keys = field.split('.')
-                value = config
-                for key in keys:
-                    if key not in value:
-                        console.print(f"[red]Error: Missing required config field: {field}[/red]")
+            # Check for new dual-model format
+            if "response_model" in config["models"] and "task_checker_model" in config["models"]:
+                # New dual-model format
+                required_fields = ["api.url", "api.api_key", "models.response_model", "models.task_checker_model"]
+                for field in required_fields:
+                    keys = field.split('.')
+                    value = config
+                    for key in keys:
+                        if key not in value:
+                            console.print(f"[red]Error: Missing required config field: {field}[/red]")
+                            sys.exit(1)
+                        value = value[key]
+                    
+                    if not value or value == "your_api_key_here":
+                        console.print(f"[red]Error: Please set a valid value for {field}[/red]")
                         sys.exit(1)
-                    value = value[key]
+            elif "default" in config["models"]:
+                # Legacy multi-model format - convert to dual-model format
+                required_fields = ["api.url", "api.api_key", "models.default"]
+                for field in required_fields:
+                    keys = field.split('.')
+                    value = config
+                    for key in keys:
+                        if key not in value:
+                            console.print(f"[red]Error: Missing required config field: {field}[/red]")
+                            sys.exit(1)
+                        value = value[key]
+                    
+                    if not value or value == "your_api_key_here":
+                        console.print(f"[red]Error: Please set a valid value for {field}[/red]")
+                        sys.exit(1)
                 
-                if not value or value == "your_api_key_here":
-                    console.print(f"[red]Error: Please set a valid value for {field}[/red]")
-                    sys.exit(1)
+                # Convert to dual-model format internally
+                default_model = config["models"]["default"]
+                config["models"]["response_model"] = default_model
+                config["models"]["task_checker_model"] = default_model
+            else:
+                console.print(f"[red]Error: Invalid models configuration format[/red]")
+                sys.exit(1)
         else:
-            # Legacy single model format - convert to new format
+            # Legacy single model format - convert to dual-model format
             required_fields = ["api.url", "api.api_key", "api.model"]
             for field in required_fields:
                 keys = field.split('.')
@@ -67,7 +92,8 @@ def load_config(config_path="config.yaml"):
             # Convert to new format internally
             model_name = config["api"]["model"]
             config["models"] = {
-                "default": "default",
+                "response_model": "default",
+                "task_checker_model": "default",
                 "available": {
                     "default": {
                         "name": model_name,
@@ -95,33 +121,60 @@ SETTINGS = CONFIG.get("settings", {})
 
 # Initialize model management
 MODELS = CONFIG["models"]
-current_model = MODELS["default"]
+current_response_model = MODELS["response_model"]
+current_task_checker_model = MODELS["task_checker_model"]
 
 # System prompt
 SYSTEM_PROMPT = """
-You are a Linux terminal assistant Agent. Please strictly follow the rules below:
+You are a Linux terminal assistant Agent. You can provide explanations and execute commands naturally.
 
-Rules:
+COMMAND FORMAT: When you need to run a command, use command blocks like this:
 
-1. When the user requests something that requires system operations, generate the corresponding terminal command (ensure Bash compatibility)
-2. If tasked with something that requires mulltiple commands, do them one by one. Only output one command as a response, or chain them together with '&&'.
-2. DO NOT use markdown tags in the output
-3. The output format must always be JSON, structured as follows:
+```command
+ls -la /home
+```
 
-{
-  "action": "execute_command",
-  "command": "ls -l",
-  "explanation": "List detailed information of the current directory using the ls tool"
-}
+You can include explanations before and after command blocks naturally:
 
-or
+Example response:
+"Let me check what's in your home directory:
 
-{
-  "action": "direct_reply",
-  "content": "Hello, how can I help you?"
-}
+```command
+ls -la /home
+```
 
-For new lines, use '\\n'.
+This will show all files including hidden ones."
+
+RULES:
+1. Use ```command blocks ONLY for commands you want executed
+2. You can mix explanations and commands naturally in the same response
+3. Each command block should contain exactly one command
+4. CRITICAL: Use ONLY ONE command block per response - NEVER multiple commands
+5. Always explain what the command will do
+6. After each command, wait to see the result before proceeding with additional commands
+7. Execute commands one at a time and analyze results before continuing
+
+COMMAND EXECUTION STRATEGY:
+- Execute EXACTLY ONE command per response
+- Wait for the result before deciding on the next step
+- Analyze command output before proceeding
+- Never assume commands will succeed - always check results first
+=======
+=======
+
+INFORMATION GATHERING:
+- NEVER assume system details - discover them with commands
+- When uncertain about system info that commands can reveal, USE COMMANDS:
+  * OS: 'uname -a', 'cat /etc/os-release', 'lsb_release -a'
+  * Software: 'which', 'command -v', 'dpkg -l', 'rpm -qa', 'pacman -Q'
+  * Config: 'cat', 'grep', 'find' for config files
+  * Hardware: 'lscpu', 'free -h', 'df -h', 'lsblk'
+  * Network: 'ip addr', 'netstat', 'ss'
+  * Processes: 'ps', 'top', 'systemctl'
+- When multiple approaches exist and choice matters, ASK THE USER
+- Examples: "Do you want to install via apt, snap, or compile from source?"
+
+The host OS is Linux - use appropriate Linux commands only.
 """
 
 # Initialize Rich components
@@ -132,63 +185,172 @@ client = OpenAI(api_key=API_CONFIG["api_key"], base_url=API_CONFIG["url"])
 
 payload = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-def get_current_model_name():
-    """Get the current model's display name"""
-    if current_model in MODELS["available"]:
-        return MODELS["available"][current_model]["display_name"]
-    return current_model
+def get_model_display_name(model_alias):
+    """Get the model's display name by alias"""
+    if model_alias in MODELS["available"]:
+        return MODELS["available"][model_alias]["display_name"]
+    return model_alias
 
-def get_current_model_api_name():
-    """Get the current model's API name"""
-    if current_model in MODELS["available"]:
-        return MODELS["available"][current_model]["name"]
-    return current_model
+def get_model_api_name(model_alias):
+    """Get the model's API name by alias"""
+    if model_alias in MODELS["available"]:
+        return MODELS["available"][model_alias]["name"]
+    return model_alias
+
+def get_current_response_model_name():
+    """Get the current response model's display name"""
+    return get_model_display_name(current_response_model)
+
+def get_current_response_model_api_name():
+    """Get the current response model's API name"""
+    return get_model_api_name(current_response_model)
+
+def get_current_task_checker_model_api_name():
+    """Get the current task checker model's API name"""
+    return get_model_api_name(current_task_checker_model)
 
 def list_models():
-    """Display available models"""
+    """Display available models and current configuration"""
+    console.print("\n[bold cyan]Current Model Configuration:[/bold cyan]")
+    response_display = get_model_display_name(current_response_model)
+    task_checker_display = get_model_display_name(current_task_checker_model)
+    console.print(f"  Response Model: [yellow]{current_response_model}[/yellow] - {response_display}")
+    console.print(f"  Task Checker Model: [yellow]{current_task_checker_model}[/yellow] - {task_checker_display}")
+    
     console.print("\n[bold cyan]Available models:[/bold cyan]")
     for alias, model_info in MODELS["available"].items():
-        marker = "[*]" if alias == current_model else "[ ]"
+        response_marker = "[R]" if alias == current_response_model else "[ ]"
+        task_marker = "[T]" if alias == current_task_checker_model else "[ ]"
         display_name = model_info["display_name"]
-        console.print(f"  {marker} [yellow]{alias}[/yellow] - {display_name}")
+        console.print(f"  {response_marker}{task_marker} [yellow]{alias}[/yellow] - {display_name}")
+    console.print("\n[dim]Legend: [R] = Response Model, [T] = Task Checker Model[/dim]")
     console.print()
 
-def switch_model(model_alias):
-    """Switch to a different model"""
-    global current_model
+def switch_model(model_spec):
+    """Switch models. Format: 'alias' (both models) or 'response_alias:task_alias'"""
+    global current_response_model, current_task_checker_model
     
-    if model_alias not in MODELS["available"]:
-        console.print(f"[red]Error: Model '{model_alias}' not found.[/red]")
-        console.print("[yellow]Use /models to see available models.[/yellow]")
-        return False
+    if ':' in model_spec:
+        # Format: response_model:task_checker_model
+        response_alias, task_alias = model_spec.split(':', 1)
+        
+        if response_alias not in MODELS["available"]:
+            console.print(f"[red]Error: Response model '{response_alias}' not found.[/red]")
+            console.print("[yellow]Use /models to see available models.[/yellow]")
+            return False
+            
+        if task_alias not in MODELS["available"]:
+            console.print(f"[red]Error: Task checker model '{task_alias}' not found.[/red]")
+            console.print("[yellow]Use /models to see available models.[/yellow]")
+            return False
+        
+        current_response_model = response_alias
+        current_task_checker_model = task_alias
+        
+        response_info = MODELS["available"][current_response_model]
+        task_info = MODELS["available"][current_task_checker_model]
+        console.print(f"[green]✓ Response: {response_info['display_name']}[/green]")
+        console.print(f"[green]✓ Task checker: {task_info['display_name']}[/green]")
+    else:
+        # Single model - use for both response and task checking
+        if model_spec not in MODELS["available"]:
+            console.print(f"[red]Error: Model '{model_spec}' not found.[/red]")
+            console.print("[yellow]Use /models to see available models.[/yellow]")
+            return False
+        
+        current_response_model = model_spec
+        current_task_checker_model = model_spec
+        model_info = MODELS["available"][model_spec]
+        console.print(f"[green]Both models switched to: {model_info['display_name']}[/green]")
     
-    current_model = model_alias
-    model_info = MODELS["available"][current_model]
-    console.print(f"[green]Switched to {model_info['display_name']}[/green]")
     return True
 
-def check_result(model_client, user_input, command_output) -> str:
-    prompt = f"""
-You are a task verification assistant. Based on the following information, determine whether the command met the user's expectations.
-If the request is a question, and the command output contains the answer, it counts as a success.
-
-User request: {user_input}
-Command output: {command_output}
-
-Please answer:
-- If the expectation is met, output "[✅] Success"
-- If not, output "[❌] Failure: Reason"
+def check_task_status(model_client, original_request, conversation_context) -> str:
     """
-    response = model_client.chat.completions.create(
-        model=get_current_model_api_name(),
-        messages=[{"role": "system", "content": prompt}]
-    )
+    Check if the overall task is complete or if more steps are needed.
+    Returns: [COMPLETE], [CONTINUE], or [FAILED]
+    """
+    prompt = f"""
+You are a task completion analyzer. Your job is to determine if a user's original request has been fully completed based on the conversation history.
+
+Original user request: {original_request}
+
+Recent conversation context: {conversation_context}
+
+Analyze whether:
+1. The original request has been FULLY completed (all parts addressed)
+2. More steps are needed to complete the request (CONTINUE with next step)
+3. The task has failed and cannot be completed (FAILED)
+
+Respond with ONLY one of these formats:
+- "[COMPLETE]" - if the original request is fully satisfied
+- "[CONTINUE]" - if more steps are needed to complete the original request
+- "[FAILED]" - if the task cannot be completed
+
+It is VERY important to only use one of these responses, as if you reply with anything else, it will break the parsing.
+Do not give reasons for the response, just answer with [COMPLETE], [CONTINUE], or [FAILED].
+
+IMPORTANT GUIDELINES:
+- Be VERY conservative about marking tasks as FAILED
+- Only use FAILED if the task is fundamentally impossible (e.g., accessing non-existent files, invalid operations)
+- Command errors, permission issues, or temporary failures should result in [CONTINUE], not [FAILED]
+- If a command failed but alternative approaches exist, use [CONTINUE]
+- Failed commands are learning opportunities - the AI can try different approaches
+- Most tasks that encounter errors can be solved with different commands or approaches
+    """
+    
+    with console.status("[bold bright_black]Checking...[/bold bright_black]", spinner_style="bright_black"):
+        response = model_client.chat.completions.create(
+            model=get_current_task_checker_model_api_name(),
+            messages=[{"role": "system", "content": prompt}]
+        )
+    
     return response.choices[0].message.content.strip()
+
+def check_if_question(model_client, ai_response) -> bool:
+    """
+    Check if the AI's response is asking a question that requires user input.
+    Returns: True if it's a question requiring user input, False otherwise
+    """
+    prompt = f"""
+You are analyzing an AI assistant's response to determine if it contains a question that requires user input.
+
+AI Response: {ai_response}
+
+Determine if this response contains a question that requires the user to provide input, make a choice, or clarify something.
+
+Examples of responses that ARE questions requiring user input:
+- "Which directory would you like to search?"
+- "Do you want to install via apt or snap?"
+- "What filename should I use?"
+- "Please specify the target directory"
+
+Examples of responses that are NOT questions requiring user input:
+- "Here's the information you requested"
+- "The command completed successfully"
+- "I found 3 files in the directory"
+- "The installation is complete"
+
+Respond with ONLY:
+- "[QUESTION]" - if the response requires user input
+- "[NO_QUESTION]" - if the response does not require user input
+
+It is VERY important to only use one of these responses, as if you reply with anything else, it will break the parsing.
+    """
+    
+    with console.status("[bold bright_black]Analyzing...[/bold bright_black]", spinner_style="bright_black"):
+        response = model_client.chat.completions.create(
+            model=get_current_task_checker_model_api_name(),
+            messages=[{"role": "system", "content": prompt}]
+        )
+    
+    result = response.choices[0].message.content.strip()
+    return "[QUESTION]" in result
 
 def get_chat_response(client: OpenAI, payload: list) -> tuple[str, str]:
     """Get chat response"""
     response = client.chat.completions.create(
-        model=get_current_model_api_name(), messages=payload, stream=True
+        model=get_current_response_model_api_name(), messages=payload, stream=True
     )
     reply_chunk, reasoning_chunk = [], []
     full_reply = ""
@@ -252,6 +414,8 @@ rejudge_count = 0
 retry_count = 0
 max_retries = SETTINGS.get("max_retries", 10)
 user_input = ""
+original_request = ""  # Track the original user request
+conversation_history = []  # Track conversation for context
 ai_mode = SETTINGS.get("default_mode", "ai").lower() == "ai"  # True for AI mode, False for direct mode
 
 if __name__ == "__main__":
@@ -263,7 +427,7 @@ if __name__ == "__main__":
                 
                 # Display mode-specific prompt with current model
                 if ai_mode:
-                    model_name = get_current_model_name()
+                    model_name = get_current_response_model_name()
                     console.print(f"[bold blue]Matthy's AI Shell [AI - {model_name}] > [/bold blue]", end="")
                 else:
                     console.print("[bold green]Matthy's AI Shell [Direct] > [/bold green]", end="")
@@ -281,7 +445,6 @@ if __name__ == "__main__":
                     subprocess.run("clear", shell=True)
                     # Reset conversation history (keep only system prompt)
                     payload = [{"role": "system", "content": SYSTEM_PROMPT}]
-                    # console.print("[green]Terminal cleared and conversation reset![/green]")
                     continue
 
                 # Handle payload display command
@@ -307,44 +470,39 @@ if __name__ == "__main__":
 
                 # Handle help command
                 if user_input.lower() in ["/help", "/h", "help"]:
-                    help_text = """
-[bold cyan]Available Commands:[/bold cyan]
+                    help_text = """[bold cyan]◆ Available Commands[/bold cyan]
 
-[yellow]Mode Control:[/yellow]
-  /ai          - Switch to AI mode (AI assists with commands)
-  /dr          - Switch to Direct mode (execute commands directly)
+[yellow]▸ Mode Control[/yellow]
+  [green]/ai[/green]      Switch to AI mode (AI assists with commands)
+  [green]/dr[/green]      Switch to Direct mode (execute commands directly)
 
-[yellow]Model Management:[/yellow]
-  /models      - List all available models
-  /model       - Show current model and available models
-  /model <name> - Switch to a specific model (e.g., /model grok)
+[yellow]▸ Model Management[/yellow]
+  [green]/models[/green]  List all available models
+  [green]/model[/green]   Show current model configuration
+  [green]/model[/green] [dim]<name>[/dim]  Switch both models (e.g., /model grok)
+  [green]/model[/green] [dim]<resp>:<task>[/dim]  Use different models (e.g., /model grok:gemini)
 
-[yellow]Session Management:[/yellow]
-  /clear       - Clear terminal and reset conversation
-  /new         - Same as /clear
-  /reset       - Same as /clear
-  /c           - Same as /clear
+[yellow]▸ Session[/yellow]
+  [green]/clear[/green]   Clear terminal and reset conversation
+  [green]/new[/green]     Same as /clear
+  [green]/c[/green]       Same as /clear
 
-[yellow]Information:[/yellow]
-  /help        - Show this help message
-  /h           - Same as /help
-  /p           - Show current conversation payload
-  /payload     - Same as /p
+[yellow]▸ Information[/yellow]
+  [green]/help[/green]    Show this help
+  [green]/h[/green]       Same as /help
+  [green]/p[/green]       Show conversation payload
 
-[yellow]Exit:[/yellow]
-  /exit        - Exit the shell
-  /q           - Same as /exit
-  exit         - Same as /exit
-  quit         - Same as /exit
+[yellow]▸ Exit[/yellow]
+  [green]/exit[/green]    Exit the shell
+  [green]/q[/green]       Same as /exit
 
-[dim]Note: In AI mode, the assistant will help you execute commands.
-In Direct mode, commands are executed immediately without AI assistance.[/dim]
-                    """
-                    console.print(help_text)
+[dim italic]AI mode: Assistant helps execute commands
+Direct mode: Commands run immediately[/dim italic]"""
+                    console.print(Panel(help_text, title="Help", border_style="cyan"))
                     continue
 
                 # Handle model switching commands
-                if user_input.lower() in ["/models", "/model"]:
+                if user_input.lower() in ["/models", "/model", "/m"]:
                     list_models()
                     continue
                 elif user_input.lower().startswith("/model "):
@@ -365,106 +523,160 @@ In Direct mode, commands are executed immediately without AI assistance.[/dim]
                 # Handle direct mode commands
                 if not ai_mode:
                     # Execute command directly without AI intervention
-                    # console.print(f"[bold yellow]Executing:[/bold yellow] {user_input}")
                     success, result = execute_command(user_input)
                     if success:
-                        print(result)
+                        if result.strip():  # Only print if there's actual output
+                            print(result)
                     else:
-                        console.print(f"[red]Error:[/red] {result}")
+                        console.print(f"[red]✗[/red] {result}")
                     continue
 
                 # AI mode - add to payload for AI processing
                 payload.append({"role": "user", "content": user_input})
+                
+                # Set original request only if this is a new conversation (not a continuation)
+                if not rejudge:
+                    original_request = user_input
+                    conversation_history = []  # Reset conversation history for new task
 
             reply, reasoning = get_chat_response(client, payload)
 
-            try:
-                # Extract JSON from code blocks or use reply directly
-                pattern = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
-                json_match = pattern.search(reply)
-                if json_match:
-                    json_str = json_match.group(1).strip()
-                else:
-                    json_str = reply.strip()
+            # Parse command blocks from the response
+            command_pattern = re.compile(r"```command\s*(.*?)\s*```", re.DOTALL)
+            commands = command_pattern.findall(reply)
+            
+            if commands:
+                # Check if there are multiple commands (forbidden)
+                if len(commands) > 1:
+                    console.print(f"[red]Multiple commands detected ({len(commands)} commands). Asking AI to correct.[/red]")
+                    payload.append({"role": "assistant", "content": reply})
+                    payload.append({
+                        "role": "system", 
+                        "content": f"You provided {len(commands)} commands in one response, which is forbidden. You must provide EXACTLY ONE command per response. Please choose the FIRST command you need to execute and provide it alone with explanation."
+                    })
+                    rejudge = True
+                    rejudge_count += 1
+                    if rejudge_count > 3:
+                        console.print(f"[red]Too many multiple command violations. Resetting conversation.[/red]")
+                        payload = [{"role": "system", "content": SYSTEM_PROMPT}]
+                        rejudge = False
+                        rejudge_count = 0
+                    continue
                 
-                # Try to parse the JSON
-                command = json.loads(json_str)
+                # Response contains exactly one command - process it
                 payload.append({"role": "assistant", "content": reply})
                 rejudge = False
                 rejudge_count = 0
                 
-                if command["action"] == "execute_command":
-                    # Display command in a panel like answers
-                    command_content = f"**Command:** `{command['command']}`\n\n{command.get('explanation', '')}"
-                    md = Markdown(command_content)
-                    console.print(Panel(md, title="Execute Command", border_style="yellow"))
+                # Display the full response with explanations
+                md = Markdown(reply)
+                console.print()  # Empty line before
+                console.print(Panel(md, title="Response", border_style="blue"))
+                console.print()  # Empty line after
+                
+                # Process the single command (we enforce exactly one command per response)
+                command = commands[0].strip()
+                if not command:
+                    console.print("[yellow]Empty command block detected.[/yellow]")
+                    continue
+                    
+                # Ask for confirmation
+                confirm = Prompt.ask(f"Execute command: `{command}`?", choices=["y", "n"], default="y")
+                if confirm.lower() == "n":
+                    # User declined - ask for reason and get alternative
+                    reason = Prompt.ask("Reason for decline")
+                    feedback_context = f"User declined to run the command: {command}\nReason: {reason}\n\nPlease provide an alternative approach to complete the original request: {original_request}"
+                    payload.append({"role": "user", "content": feedback_context})
+                    rejudge = True
+                else:
+                    # Execute the command
+                    success, result = execute_command(command)
+                    
+                    # Display command output
+                    if result.strip():  # Only print output if there's something to show
+                        # Use different colors for success vs failure
+                        border_style = "bright_black" if success else "red"
+                        title_prefix = "Output" if success else "Error"
+                        console.print()  # Empty line before
+                        console.print(Panel(result, title=f"{title_prefix}: {command}", border_style=border_style))
+                        console.print()  # Empty line after
 
-                    confirm = Prompt.ask("Run?", choices=["Y", "N"], default="Y")
-
-                    if confirm == "Y":
-                        success, result = execute_command(command["command"])
-                        print("\n" + result)
-
-                        # Add verification logic
-                        verification = check_result(client, user_input, result)
-                        # console.print(f"[dim]Verification result: {verification}[/dim]")
-
-                        # Check if the task failed and retry if needed
-                        if "[❌] Failure:" in verification and retry_count < max_retries:
+                    # Track conversation
+                    conversation_history.append(f"Command: {command}")
+                    conversation_history.append(f"Output: {result}")
+                    conversation_history.append(f"Success: {success}")
+                    
+                    # Keep conversation history manageable (last 10 entries)
+                    if len(conversation_history) > 10:
+                        conversation_history = conversation_history[-10:]
+                    
+                    # Check if the overall task is complete
+                    conversation_context = "\n".join(conversation_history)
+                    task_status = check_task_status(client, original_request, conversation_context)
+                    
+                    if "[CONTINUE]" in task_status:
+                        # Task needs more steps - let AI continue
+                        continue_context = f"Command executed: {command}\nOutput: {result}\nSuccess: {success}\n\nThe original request ({original_request}) is not yet complete. Please continue with the next step."
+                        payload.append({"role": "user", "content": continue_context})
+                        rejudge = True
+                    elif "[FAILED]" in task_status:
+                        # Task failed - provide summary
+                        if retry_count < max_retries:
                             retry_count += 1
-                            # console.print(f"[yellow]Task failed. Attempting retry {retry_count}/{max_retries}...[/yellow]")
-                            
-                            # Add failure context to payload for the AI to learn from
-                            failure_context = f"The previous command '{command['command']}' failed. Output: {result}. Verification: {verification}. Please try a different approach to complete the user's request: {user_input}"
+                            failure_context = f"Command executed but task status is failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\nStatus: {task_status}\n\nPlease try a different approach to complete: {original_request}"
                             payload.append({"role": "user", "content": failure_context})
-                            rejudge = True  # Let the AI try again with a different approach
-                            continue
-                        elif "[❌] Failure:" in verification and retry_count >= max_retries:
-                            console.print(f"[red]Maximum retry attempts ({max_retries}) reached. Task could not be completed.[/red]")
-                            retry_count = 0
-                            # Ask AI to provide failure summary
-                            payload.append({"role": "assistant", "content": result + "\nVerification result: " + verification})
-                            payload.append(
-                                {
-                                    "role": "user",
-                                    "content": "The task could not be completed after multiple attempts. Please provide a summary of what was attempted and suggest alternative solutions using the direct reply template.",
-                                }
-                            )
                             rejudge = True
                         else:
-                            # console.print(f"[green]Task completed successfully![/green]")
-                            retry_count = 0
-                            # Ask AI to provide success summary
-                            payload.append({"role": "assistant", "content": result + "\nVerification result: " + verification})
-                            payload.append(
-                                {
-                                    "role": "user",
-                                    "content": "The task has been completed successfully! Please provide a brief summary of what was accomplished and the final result using the direct reply template. Do not repeat that the task was successful, but if there was a question, answer it.",
-                                }
-                            )
-                            rejudge = True  # Set the flag to let the LLM handle this summary request in the next round
-                    else:
-                        console.print("[yellow]Execution cancelled[/yellow]")
-                        payload.append({"role": "assistant", "content": "Execution cancelled"})
-
-                elif command["action"] == "direct_reply":
-                    # Direct reply with Markdown formatting
-                    md = Markdown(command["content"])
-                    console.print(Panel(md, title="Reply", border_style="blue"))
-
-            except json.JSONDecodeError:
-                console.print(f"[red]Unable to parse result:[/red]\n {reply}")
-                payload.append(
-                    {
-                        "role": "system",
-                        "content": "Please provide a reply in the correct format (JSON only, no markdown tags).",
-                    }
-                )
-                rejudge = True
-                rejudge_count += 1
-                if rejudge_count > 3:
-                    print(f"[red] [!] Too many parsing failures, exiting![/red]")
-                    break
+                            console.print(f"[yellow]Maximum retry attempts ({max_retries}) reached.[/yellow]")
+                            retry_choice = Prompt.ask("Do you want to continue trying?", choices=["Y", "N"], default="N")
+                            if retry_choice == "Y":
+                                retry_count = 0  # Reset retry count
+                                failure_context = f"Command executed but failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\nStatus: {task_status}\n\nUser requested to continue trying. Please try a different approach to complete: {original_request}"
+                                payload.append({"role": "user", "content": failure_context})
+                                rejudge = True
+                            else:
+                                payload.append({"role": "user", "content": f"Task failed after {max_retries} attempts and user chose to stop. Please provide a summary of what was attempted and suggest alternatives."})
+                                rejudge = True
+                                retry_count = 0
+                    else:  # [COMPLETE]
+                        # Task is complete - ask for summary
+                        payload.append({"role": "user", "content": f"Task completed. Please provide a brief summary of what was accomplished for: {original_request}."})
+                        rejudge = True
+                        retry_count = 0
+            else:
+                # No commands found - this is a direct text response
+                payload.append({"role": "assistant", "content": reply})
+                rejudge = False
+                rejudge_count = 0
+                
+                # Display as a direct reply
+                md = Markdown(reply)
+                console.print()  # Empty line before
+                console.print(Panel(md, title="Reply", border_style="blue"))
+                console.print()  # Empty line after
+                
+                # Check if this is a question requiring user input or if task is complete
+                conversation_history.append(f"AI Reply: {reply}")
+                
+                # # Keep conversation history manageable (last 10 entries)
+                # if len(conversation_history) > 10:
+                #     conversation_history = conversation_history[-10:]
+                
+                # Use AI to check if this is a question requiring user input
+                is_question = check_if_question(client, reply)
+                
+                if not is_question:
+                    # Not a question, check if task is complete
+                    conversation_context = "\n".join(conversation_history)
+                    task_status = check_task_status(client, original_request, conversation_context)
+                    
+                    if "[CONTINUE]" in task_status:
+                        # Task needs more steps - let AI continue
+                        continue_context = f"The original request ({original_request}) is not yet complete. Please continue with the next step."
+                        payload.append({"role": "user", "content": continue_context})
+                        rejudge = True
+                    # If COMPLETE or FAILED, just end naturally (no rejudge)
+                # If it's a question, don't check completion - wait for user response
 
         except KeyboardInterrupt:
             console.print("\n[yellow]Use /exit to quit the program[/yellow]")
@@ -472,4 +684,3 @@ In Direct mode, commands are executed immediately without AI assistance.[/dim]
         except Exception as error:
             console.print(f"[red]Error occurred:[/red] {str(error)}")
             continue
-

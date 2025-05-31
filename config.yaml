@@ -1,14 +1,18 @@
 # AI Agent Configuration File
 # This file contains all the configuration settings for the AI terminal assistant
 
-# API Configuration
+# API Configuration - PRECONFIGURED FOR OPENROUTER.AI
 api:
   url: "https://openrouter.ai/api/v1"  # OpenRouter API endpoint
   api_key: "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"  # Your API key
 
 # Models Configuration
 models:
-  default: "claude"  # Default model alias to use on startup
+  # Primary model for generating responses
+  response_model: grok
+  
+  # Model for task completion checking (can be different for optimization)
+  task_checker_model: caller
   
   # Available models with aliases for easy switching
   available:
@@ -35,13 +39,13 @@ models:
       display_name: "Llama 4 Scout"
     gemini:
       name: "google/gemini-2.0-flash-exp:free"
-      alias: "gemini"
+      alias: "gemini-2"
       display_name: "Gemini 2.0 Flash"
     
     # Paid models - higher quality but cost per request
     gemini-lite:
       name: "google/gemini-2.0-flash-lite-001"
-      alias: "gemini-lite"
+      alias: "gemini-2-lite"
       display_name: "Gemini 2.0 Flash Lite"
     grok:
       name: "x-ai/grok-3-mini-beta"
@@ -63,9 +67,35 @@ models:
       name: "anthropic/claude-3-haiku"
       alias: "claude-3"
       display_name: "Claude 3 Haiku"
+    4o-mini:
+      name: "openai/gpt-4o-mini"
+      alias: "4o-mini"
+      display_name: "GPT 4o Mini"
+    4.1-nano:
+      name: "openai/gpt-4.1-nano"
+      alias: "4.1-nano"
+      display_name: "GPT 4.1 Nano"
+    command-r:
+      name: "cohere/command-r-08-2024"
+      alias: "command-r"
+      display_name: "Command R"
+    caller:
+      name: "arcee-ai/caller-large"
+      alias: "caller"
+      display_name: "Caller Large"
 
-# Application Settings
+    # Expensive models - Best quality but very expensive
+    gemini-2.5-pro:
+      name: "google/gemini-2.5-pro-preview"
+      alias: "gemini-2.5-pro"
+      display_name: "Gemini 2.5 Pro"
+    command-r+:
+      name: "cohere/command-r-plus-08-2024"
+      alias: "command-r+"
+      display_name: "Command R+"
+
+# Shell Settings
 settings:
   max_retries: 10  # Maximum number of retry attempts for failed commands
   payload_truncate_length: 500  # Length to truncate long messages in payload display
-  default_mode: "ai"  # Default mode: "ai" for AI assistance, "direct" for direct command execution
+  default_mode: ai
