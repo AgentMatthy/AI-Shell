@@ -99,4 +99,3 @@ settings:
   max_retries: 10  # Maximum number of retry attempts for failed commands
   payload_truncate_length: 500  # Length to truncate long messages in payload display
   default_mode: ai
-  show_welcome_message: false
