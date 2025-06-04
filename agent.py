@@ -159,8 +159,6 @@ COMMAND EXECUTION STRATEGY:
 - Wait for the result before deciding on the next step
 - Analyze command output before proceeding
 - Never assume commands will succeed - always check results first
-=======
-=======
 
 INFORMATION GATHERING:
 - NEVER assume system details - discover them with commands
@@ -387,26 +385,118 @@ def decode_output(output_bytes: bytes) -> str:
     # Default to UTF-8 with error replacement
     return output_bytes.decode('utf-8', errors='replace')
 
-
 def execute_command(command: str) -> tuple[bool, str]:
-    """Execute the command and return its output."""
+    """Execute the command with full interactive real-time I/O."""
+    import select
+    import sys
+    import tty
+    import termios
+    
     try:
+        # Start the process with PTY for true interactive behavior
+        import pty
+        master_fd, slave_fd = pty.openpty()
+        
         process = subprocess.Popen(
             command,
             shell=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            preexec_fn=os.setsid
         )
-        stdout_bytes, stderr_bytes = process.communicate()
-        stdout = decode_output(stdout_bytes)
-        stderr = decode_output(stderr_bytes)
-
-        if process.returncode == 0:
-            return True, stdout
-        else:
-            error_output = stderr if stderr.strip() else stdout
-            return False, error_output.strip()
+        
+        # Close slave fd in parent process
+        os.close(slave_fd)
+        
+        # Store terminal settings
+        old_settings = None
+        try:
+            old_settings = termios.tcgetattr(sys.stdin.fileno())
+            tty.setraw(sys.stdin.fileno())
+        except:
+            pass  # Might fail in some environments
+        
+        output_buffer = []
+        
+        try:
+            while True:
+                # Check if process is still running
+                if process.poll() is not None:
+                    break
+                
+                # Use select to check for available input/output
+                ready, _, _ = select.select([sys.stdin, master_fd], [], [], 0.1)
+                
+                # Handle user input
+                if sys.stdin in ready:
+                    try:
+                        user_input = os.read(sys.stdin.fileno(), 1024)
+                        if user_input:
+                            os.write(master_fd, user_input)
+                    except OSError:
+                        break
+                
+                # Handle command output
+                if master_fd in ready:
+                    try:
+                        output = os.read(master_fd, 1024)
+                        if output:
+                            decoded_output = output.decode('utf-8', errors='replace')
+                            print(decoded_output, end='', flush=True)
+                            output_buffer.append(decoded_output)
+                        else:
+                            break
+                    except OSError:
+                        break
+            
+            # Get any remaining output
+            try:
+                while True:
+                    ready, _, _ = select.select([master_fd], [], [], 0.1)
+                    if not ready:
+                        break
+                    output = os.read(master_fd, 1024)
+                    if not output:
+                        break
+                    decoded_output = output.decode('utf-8', errors='replace')
+                    print(decoded_output, end='', flush=True)
+                    output_buffer.append(decoded_output)
+            except OSError:
+                pass
+                
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Interrupted[/yellow]")
+            try:
+                os.killpg(os.getpgid(process.pid), 2)  # Send SIGINT to process group
+            except:
+                process.terminate()
+            return False, "Command interrupted by user"
+        
+        finally:
+            # Restore terminal settings
+            if old_settings:
+                try:
+                    termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
+                except:
+                    pass
+            
+            # Close master fd
+            try:
+                os.close(master_fd)
+            except:
+                pass
+        
+        # Wait for process to complete
+        return_code = process.wait()
+        
+        # Combine all output
+        full_output = ''.join(output_buffer).strip()
+        
+        return return_code == 0, full_output
+            
     except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
         return False, str(e)
 
 rejudge = False
@@ -524,11 +614,10 @@ Direct mode: Commands run immediately[/dim italic]"""
                 if not ai_mode:
                     # Execute command directly without AI intervention
                     success, result = execute_command(user_input)
-                    if success:
-                        if result.strip():  # Only print if there's actual output
-                            print(result)
-                    else:
-                        console.print(f"[red]✗[/red] {result}")
+                    # Don't print result - it's already shown in real-time
+                    # Only show error indicator for failed commands
+                    if not success:
+                        console.print(f"[red]✗ Command failed[/red]")
                     continue
 
                 # AI mode - add to payload for AI processing
@@ -580,8 +669,23 @@ Direct mode: Commands run immediately[/dim italic]"""
                     console.print("[yellow]Empty command block detected.[/yellow]")
                     continue
                     
-                # Ask for confirmation
-                confirm = Prompt.ask(f"Execute command: `{command}`?", choices=["y", "n"], default="y")
+                # # Ask for confirmation with aesthetic panel that includes the prompt
+                # console.print()  # Empty line before
+                
+                # Create a custom prompt within the panel
+                panel_content = f"[bold white]Execute command:[/bold white] [cyan]`{command}`[/cyan]\n\n[yellow]Proceed? [y/n] (y):[/yellow] "
+                
+                # Print the panel with the prompt
+                console.print(Panel(panel_content, 
+                                  title="[yellow]Command[/yellow]", 
+                                  border_style="yellow"), end="")
+                
+                # Get user input directly without Rich's Prompt
+                user_choice = input().strip().lower()
+                if not user_choice:
+                    user_choice = "y"  # Default to yes
+                
+                confirm = user_choice
                 if confirm.lower() == "n":
                     # User declined - ask for reason and get alternative
                     reason = Prompt.ask("Reason for decline")
@@ -592,13 +696,10 @@ Direct mode: Commands run immediately[/dim italic]"""
                     # Execute the command
                     success, result = execute_command(command)
                     
-                    # Display command output
-                    if result.strip():  # Only print output if there's something to show
-                        # Use different colors for success vs failure
-                        border_style = "bright_black" if success else "red"
-                        title_prefix = "Output" if success else "Error"
+                    # Only show panel for errors - success output is already shown in real-time
+                    if not success and result.strip():
                         console.print()  # Empty line before
-                        console.print(Panel(result, title=f"{title_prefix}: {command}", border_style=border_style))
+                        console.print(Panel(result, title=f"Error: {command}", border_style="red"))
                         console.print()  # Empty line after
 
                     # Track conversation
@@ -652,7 +753,7 @@ Direct mode: Commands run immediately[/dim italic]"""
                 # Display as a direct reply
                 md = Markdown(reply)
                 console.print()  # Empty line before
-                console.print(Panel(md, title="Reply", border_style="blue"))
+                console.print(Panel(md, title="Summary", border_style="blue"))
                 console.print()  # Empty line after
                 
                 # Check if this is a question requiring user input or if task is complete
