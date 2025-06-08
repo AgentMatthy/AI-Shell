@@ -1,11 +1,8 @@
 #!/usr/bin/env python
 
-# This is a Python script that uses the OpenAI API to interact with a Linux terminal.
-# It is designed to be an agentic ai assistant that can execute commands and provide
-# explanations based on the user's input.
-
 import json
 import requests
+import time
 from rich.console import Console
 from openai import OpenAI
 
@@ -159,12 +156,13 @@ Do not include any other text or formatting."""
                 "Authorization": f"Bearer {self.config['api']['api_key']}"
             }
             
-            response = requests.post(
-                f"{self.config['api']['url']}/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
+            with self.console.status("[bold bright_black]Checking...[/bold bright_black]", spinner_style="bright_black"):
+                response = requests.post(
+                    f"{self.config['api']['url']}/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
+                )
             
             if response.status_code == 200:
                 data = response.json()
@@ -189,33 +187,71 @@ Do not include any other text or formatting."""
             self.console.print(f"[yellow]Warning: Task status check failed: {e}[/yellow]")
             return None, "Task status check unavailable"
     
-    def check_if_question(self, user_input):
-        """Check if user input is a question or a task request"""
-        question_indicators = ['?', 'what', 'how', 'why', 'when', 'where', 'who', 'which', 'can you tell', 'explain', 'describe']
-        user_lower = user_input.lower().strip()
-        
-        # Check for question marks or question words
-        if '?' in user_input:
-            return True
-        
-        for indicator in question_indicators:
-            if user_lower.startswith(indicator):
-                return True
-        
-        return False
+    def check_if_question(self, ai_response):
+        """Check if the AI's response is asking a question that requires user input"""
+        try:
+            prompt = f"""You are analyzing an AI assistant's response to determine if it contains a question that requires user input.
+
+AI Response: {ai_response}
+
+Determine if this response contains a question that requires the user to provide input, make a choice, or clarify something.
+
+Examples of responses that ARE questions requiring user input:
+- "Which directory would you like to search?"
+- "Do you want to install via apt or snap?"
+- "What filename should I use?"
+- "Please specify the target directory"
+
+Examples of responses that are NOT questions requiring user input:
+- "Here's the information you requested"
+- "The command completed successfully"
+- "I found 3 files in the directory"
+- "The installation is complete"
+
+Respond with ONLY:
+- "[QUESTION]" - if the response requires user input
+- "[NO_QUESTION]" - if the response does not require user input
+
+It is VERY important to only use one of these responses, as if you reply with anything else, it will break the parsing."""
+
+            # Use task checker model for consistency
+            model_name = self.model_manager.get_task_checker_model_for_api()
+            
+            with self.console.status("[bold bright_black]Analyzing...[/bold bright_black]", spinner_style="bright_black"):
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "system", "content": prompt}],
+                    stream=False
+                )
+            
+            result = response.choices[0].message.content.strip()
+            return "[QUESTION]" in result
+            
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Question check failed: {e}[/yellow]")
+            # Default to assuming it's not a question to avoid breaking the flow
+            return False
     
     def get_response_without_user_input(self):
         """Get response from the chat API without adding any new user input"""
+        # Generate response from current conversation payload without adding new user input
+        return self._generate_response()
+    
+    def _generate_response(self):
+        """Internal method to generate response from current payload"""
         try:
-            # Get the current model for API
+            # Get the current model name for the API request
             model_name = self.model_manager.get_current_model_for_api()
             
-            # Make streaming API request
-            response = self.client.chat.completions.create(
-                model=model_name, 
-                messages=self.payload, 
-                stream=True
-            )
+            # Make streaming API request - shows "Processing..." during connection establishment
+            with self.console.status("[bold cyan]Processing...[/bold cyan]", spinner_style="cyan"):
+                response = self.client.chat.completions.create(
+                    model=model_name, 
+                    messages=self.payload, 
+                    stream=True
+                )
+            
+            # Process the streaming response - shows "Thinking..." during content generation
             
             reply_chunk = []
             reasoning_chunk = []
@@ -251,7 +287,7 @@ Do not include any other text or formatting."""
             self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
             return None, None
         except Exception as e:
-            self.console.print(f"[red]Unexpected error: {e}[/red]")
+            self.console.print(f"[red]Unexpected error in _generate_response: {e}[/red]")
             return None, None
 
     def clear_history(self):

@@ -62,7 +62,7 @@ Type your requests and I'll help you execute commands.
 
 [yellow]Tips:[/yellow]
 • Be specific in your requests for better results
-• The AI will ask for confirmation before running potentially dangerous commands
+• The AI will ask for confirmation before running commands
 • You can interrupt command execution with Ctrl+C
         """
         

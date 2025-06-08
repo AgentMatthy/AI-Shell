@@ -1,9 +1,16 @@
 #!/usr/bin/env python
 
+# This is a Python script that uses the OpenAI API to interact with a Linux terminal.
+# It is designed to be an agentic ai assistant that can execute commands and provide
+# explanations based on the user's input.
+
+# This script is split into several other files for better organization. Add new code to the relevant files.
+
 import sys
 import os
 import re
 import subprocess
+import time
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -48,6 +55,7 @@ def main():
             ui.show_welcome()
         
         # Main interaction loop
+        user_input = ""
         while True:
             try:
                 if not rejudge:
@@ -127,19 +135,46 @@ def main():
                         original_request = user_input
                         conversation_history = []
 
-                # Get AI response
-                # Don't pass original request if we're just asking for summary after completion
-                if rejudge and not original_request:
-                    # For summary after completion, don't add any new user input
-                    response, reasoning = chat_manager.get_response_without_user_input()
+                # AI mode - add to payload for AI processing
+                if not rejudge:
+                    # Add new user input to conversation payload
+                    chat_manager.payload.append({"role": "user", "content": user_input})
                 else:
-                    response, reasoning = chat_manager.get_chat_response(user_input)
+                    # Rejudge mode - continuing from previous context, no new user input needed
+                    pass
+                    
+                # Generate AI response from current conversation context
+                # This will show "Processing..." then "Thinking..." status messages
+                response, reasoning = chat_manager.get_response_without_user_input()
                 
                 if not response:
                     # Response was interrupted or failed, reset state and continue
                     rejudge = False
                     rejudge_count = 0
                     retry_count = 0
+                    continue
+                
+                # Check if response is just whitespace or empty
+                if not response.strip():
+                    ui.console.print("[yellow]AI provided empty response - treating as task completion signal.[/yellow]")
+                    
+                    # If we have an original request, this might be a completion signal
+                    if original_request:
+                        # Add a completion summary request
+                        chat_manager.payload.append({
+                            "role": "user", 
+                            "content": f"Task appears to be complete for: {original_request}. Please provide a brief summary of what was accomplished."
+                        })
+                        rejudge = True
+                        # Clear original_request to prevent loops
+                        original_request = ""
+                    else:
+                        # No original request context - ask for clarification
+                        chat_manager.payload.append({
+                            "role": "user", 
+                            "content": "You provided an empty response. Please provide a proper response or explain why you cannot proceed."
+                        })
+                        rejudge = True
                     continue
 
                 # Parse command blocks from the response
@@ -151,7 +186,7 @@ def main():
                     if len(commands) > 1:
                         ui.console.print(f"[red]Multiple commands detected ({len(commands)} commands). Asking AI to correct.[/red]")
                         chat_manager.payload.append({
-                            "role": "system", 
+                            "role": "user", 
                             "content": f"You provided {len(commands)} commands in one response, which is forbidden. You must provide EXACTLY ONE command per response. Please choose the FIRST command you need to execute and provide it alone with explanation."
                         })
                         rejudge = True
@@ -163,7 +198,11 @@ def main():
                             rejudge_count = 0
                         continue
                     
-                    # Display the full response
+                    # Response contains exactly one command - process it
+                    rejudge = False
+                    rejudge_count = 0
+                    
+                    # Display the full response with explanations
                     md = Markdown(response)
                     ui.console.print()
                     ui.console.print(Panel(md, title="Response", border_style="blue"))
@@ -205,11 +244,13 @@ def main():
                         if len(conversation_history) > 10:
                             conversation_history = conversation_history[-10:]
                         
-                        # Check if task is complete
+                        # Check if the task is complete by analyzing command output against original request
+                        # This will show "Checking..." status message
                         completed, reason = chat_manager.check_task_status(result, original_request)
-                        
+
+                        # Provide feedback to the AI based on task completion status
                         if completed is False:
-                            # Task needs more steps
+                            # Task needs more steps - prepare context for AI to continue
                             continue_context = f"Command executed: {command}\nOutput: {result}\nSuccess: {success}\n\nThe original request ({original_request}) is not yet complete. Please continue with the next step."
                             chat_manager.payload.append({"role": "user", "content": continue_context})
                             rejudge = True
@@ -217,24 +258,28 @@ def main():
                             # Task failed
                             if retry_count < max_retries:
                                 retry_count += 1
-                                failure_context = f"Command executed but task status check failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nPlease try a different approach to complete: {original_request}"
-                                chat_manager.payload.append({"role": "user", "content": failure_context})
+                                with ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
+                                    failure_context = f"Command executed but task status check failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nPlease try a different approach to complete: {original_request}"
+                                    chat_manager.payload.append({"role": "user", "content": failure_context})
                                 rejudge = True
                             else:
                                 ui.console.print(f"[yellow]Maximum retry attempts ({max_retries}) reached.[/yellow]")
                                 retry_choice = Prompt.ask("Do you want to continue trying?", choices=["Y", "N"], default="N")
                                 if retry_choice == "Y":
                                     retry_count = 0
-                                    failure_context = f"Command executed but failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nUser requested to continue trying. Please try a different approach to complete: {original_request}"
-                                    chat_manager.payload.append({"role": "user", "content": failure_context})
+                                    with ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
+                                        failure_context = f"Command executed but failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nUser requested to continue trying. Please try a different approach to complete: {original_request}"
+                                        chat_manager.payload.append({"role": "user", "content": failure_context})
                                     rejudge = True
                                 else:
-                                    chat_manager.payload.append({"role": "user", "content": f"Task failed after {max_retries} attempts and user chose to stop. Please provide a summary of what was attempted and suggest alternatives."})
+                                    with ui.console.status("[bold red]Preparing summary...[/bold red]", spinner_style="red"):
+                                        chat_manager.payload.append({"role": "user", "content": f"Task failed after {max_retries} attempts and user chose to stop. Please provide a summary of what was attempted and suggest alternatives."})
                                     rejudge = True
                                     retry_count = 0
                         else:
                             # Task is complete
-                            chat_manager.payload.append({"role": "system", "content": f"Task completed. Please provide a brief summary of what was accomplished for: {original_request}."})
+                            with ui.console.status("[bold green]Preparing summary...[/bold green]", spinner_style="green"):
+                                chat_manager.payload.append({"role": "user", "content": f"Task completed. Please provide a brief summary of what was accomplished for: {original_request}."})
                             rejudge = True
                             retry_count = 0
                             # Clear original_request to prevent re-feeding it
@@ -249,6 +294,29 @@ def main():
                     ui.console.print()
                     ui.console.print(Panel(md, title="Summary", border_style="blue"))
                     ui.console.print()
+                    
+                    # Check if this is a question requiring user input or if task needs to continue
+                    if original_request:  # Only check if we have an original request to complete
+                        conversation_history.append(f"AI Reply: {response}")
+                        
+                        # Keep conversation history manageable (last 10 entries)
+                        if len(conversation_history) > 10:
+                            conversation_history = conversation_history[-10:]
+                        
+                        # Use AI to check if this is a question requiring user input
+                        is_question = chat_manager.check_if_question(response)
+                        
+                        if not is_question:
+                            # Not a question, check if task is complete
+                            conversation_context = "\n".join(conversation_history)
+                            completed, reason = chat_manager.check_task_status(conversation_context, original_request)
+                            
+                            if completed is False:  # Task needs more steps
+                                continue_context = f"The original request ({original_request}) is not yet complete. Please continue with the next step."
+                                chat_manager.payload.append({"role": "user", "content": continue_context})
+                                rejudge = True
+                            # If completed is True or None, just end naturally (no rejudge)
+                        # If it's a question, don't check completion - wait for user response
                 
             except KeyboardInterrupt:
                 # ui.console.print("\n[yellow]Use /exit to quit the program[/yellow]")

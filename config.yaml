@@ -9,10 +9,10 @@ api:
 # Models Configuration
 models:
   # Primary model for generating responses
-  response_model: grok
+  response_model: claude-4
   
   # Model for task completion checking (can be different for optimization)
-  task_checker_model: caller
+  task_checker_model: gemini-25
   
   # Available models with aliases for easy switching
   available:
@@ -93,10 +93,14 @@ models:
       name: "cohere/command-r-plus-08-2024"
       alias: "command-r+"
       display_name: "Command R+"
+    claude-4:
+      name: "anthropic/claude-sonnet-4"
+      alias: "claude-4"
+      display_name: "Claude Sonnet 4"
 
 # Shell Settings
 settings:
-  max_retries: 10  # Maximum number of retry attempts for failed commands
-  payload_truncate_length: 500  # Length to truncate long messages in payload display
+  max_retries: 30  # Maximum number of retry attempts for failed commands
+  payload_truncate_length: 1500  # Length to truncate long messages in payload display
   default_mode: ai
   show_welcome_message: false
