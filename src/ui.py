@@ -53,17 +53,32 @@ Type your requests and I'll help you execute commands.
 • "Install the requests library using pip"
 • "Show me the git status"
 
-[yellow]Commands:[/yellow]
+[yellow]General Commands:[/yellow]
 • [green]/help[/green] - Show this help message
 • [green]/models[/green] - List all available models
-• [green]/switch <model_alias>[/green] - Switch to a different model
+• [green]/model <alias>[/green] - Switch to a different model
 • [green]/clear[/green] - Clear conversation history
+• [green]/ai[/green] - Switch to AI mode
+• [green]/dr[/green] - Switch to direct mode
+• [green]/p[/green] - Show conversation payload
 • [green]/exit[/green] or [green]/quit[/green] - Exit the program
+
+[yellow]Conversation Management:[/yellow]
+• [green]/save[/green] - Save current conversation (will prompt for name)
+• [green]/save <name>[/green] - Save current conversation with specific name
+• [green]/load[/green] - Load a saved conversation (will show list)
+• [green]/load <name>[/green] - Load specific conversation by name
+• [green]/conversations[/green] or [green]/cv[/green] - List all saved conversations
+• [green]/archive[/green] - Archive current conversation and start fresh
+• [green]/delete <name>[/green] - Delete a saved conversation
+• [green]/status[/green] - Show current conversation status
 
 [yellow]Tips:[/yellow]
 • Be specific in your requests for better results
 • The AI will ask for confirmation before running commands
 • You can interrupt command execution with Ctrl+C
+• Conversations auto-save every 5 interactions
+• Previous conversations resume automatically on startup
         """
         
         panel = Panel(
@@ -73,9 +88,14 @@ Type your requests and I'll help you execute commands.
         )
         self.console.print(panel)
     
-    def get_user_input(self, prompt_text="You"):
+    def get_user_input(self, prompt_text="You", show_directory=True):
         """Get user input with a styled prompt"""
-        return Prompt.ask(f"[bold blue]{prompt_text}[/bold blue]")
+        if show_directory:
+            from .commands import get_prompt_directory
+            current_dir = get_prompt_directory()
+            return Prompt.ask(f"[bold blue]{prompt_text}[/bold blue] [dim cyan]{current_dir}[/dim cyan]")
+        else:
+            return Prompt.ask(f"[bold blue]{prompt_text}[/bold blue]")
     
     def show_ai_response(self, response, title="AI Assistant"):
         """Display AI response in a styled panel"""

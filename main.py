@@ -22,7 +22,8 @@ from src.config import load_config
 from src.models import ModelManager
 from src.chat import ChatManager
 from src.ui import UIManager
-from src.commands import execute_command
+from src.commands import execute_command, get_prompt_directory
+from src.conversation_manager import ConversationManager
 
 def main():
     """Main entry point for the AI Shell Assistant"""
@@ -36,7 +37,15 @@ def main():
         
         # Initialize managers
         model_manager = ModelManager(config)
-        chat_manager = ChatManager(config, model_manager)
+        conversation_manager = ConversationManager(config)
+        chat_manager = ChatManager(config, model_manager, conversation_manager)
+        
+        # Check for conversation resume
+        resume_session = conversation_manager.check_for_resume()
+        if resume_session:
+            # Resume the previous conversation
+            resumed_payload = conversation_manager.resume_session(resume_session)
+            chat_manager.payload = resumed_payload
         
         # Settings
         settings = config.get("settings", {})
@@ -62,17 +71,19 @@ def main():
                     rejudge = False
                     retry_count = 0
                     
-                    # Display mode-specific prompt with current model
+                    # Display mode-specific prompt with current model and directory
+                    current_dir = get_prompt_directory()
                     if ai_mode:
                         model_name = model_manager.get_model_display_name(model_manager.current_model)
-                        ui.console.print(f"[bold blue]AI Shell [AI - {model_name}] > [/bold blue]", end="")
+                        ui.console.print(f"[bold blue]AI Shell [AI - {model_name}] [dim cyan]{current_dir}[/dim cyan] > [/bold blue]", end="")
                     else:
-                        ui.console.print("[bold green]AI Shell [Direct] > [/bold green]", end="")
+                        ui.console.print(f"[bold green]AI Shell [Direct] [dim cyan]{current_dir}[/dim cyan] > [/bold green]", end="")
                     
                     user_input = input().strip()
 
                     # Handle exit commands
                     if user_input.lower() in ["/exit", "exit", "quit", ";q", ":q", "/q"]:
+                        conversation_manager.save_and_exit()
                         break
 
                     # Handle clear command
@@ -102,8 +113,51 @@ def main():
                         continue
 
                     # Handle help command
+                    # Handle help command
                     if user_input.lower() in ["/help", "/h", "help"]:
                         ui.show_help()
+                        continue
+
+                    # Handle conversation management commands
+                    if user_input.lower() in ["/save"]:
+                        conversation_manager.save_conversation()
+                        continue
+                    elif user_input.lower().startswith("/save "):
+                        name = user_input[6:].strip()
+                        conversation_manager.save_conversation(name)
+                        continue
+                    elif user_input.lower() in ["/load"]:
+                        new_payload = conversation_manager.load_conversation()
+                        if new_payload is not None:
+                            chat_manager.payload = new_payload
+                        continue
+                    elif user_input.lower().startswith("/load "):
+                        name = user_input[6:].strip()
+                        new_payload = conversation_manager.load_conversation(name)
+                        if new_payload is not None:
+                            chat_manager.payload = new_payload
+                        continue
+                    elif user_input.lower() in ["/conversations", "/cv"]:
+                        conversation_manager.list_conversations()
+                        continue
+                    elif user_input.lower() == "/archive":
+                        if conversation_manager.archive_conversation():
+                            chat_manager.clear_history()
+                        continue
+                    elif user_input.lower().startswith("/delete "):
+                        name = user_input[8:].strip()
+                        conversation_manager.delete_conversation(name)
+                        continue
+                    elif user_input.lower() == "/status":
+                        status = conversation_manager.get_status_info()
+                        ui.console.print(f"\n[bold cyan]Conversation Status:[/bold cyan]")
+                        ui.console.print(f"Session ID: {status['session_id']}")
+                        ui.console.print(f"Started: {status['started_at']}")
+                        ui.console.print(f"Messages: {status['message_count']}")
+                        ui.console.print(f"Interactions: {status['interactions']}")
+                        ui.console.print(f"Status: {status['status']}")
+                        if status['original_request']:
+                            ui.console.print(f"Original request: {status['original_request']}")
                         continue
 
                     # Handle model commands
@@ -136,9 +190,12 @@ def main():
                         conversation_history = []
 
                 # AI mode - add to payload for AI processing
+                # AI mode - add to payload for AI processing
                 if not rejudge:
                     # Add new user input to conversation payload
                     chat_manager.payload.append({"role": "user", "content": user_input})
+                    # Update conversation manager with new payload
+                    conversation_manager.update_payload(chat_manager.payload, original_request)
                 else:
                     # Rejudge mode - continuing from previous context, no new user input needed
                     pass

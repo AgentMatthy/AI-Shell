@@ -7,9 +7,10 @@ from rich.console import Console
 from openai import OpenAI
 
 class ChatManager:
-    def __init__(self, config, model_manager):
+    def __init__(self, config, model_manager, conversation_manager=None):
         self.config = config
         self.model_manager = model_manager
+        self.conversation_manager = conversation_manager
         self.console = Console()
         self.payload = [{"role": "system", "content": self._get_system_prompt()}]
         
@@ -114,6 +115,10 @@ The host OS is Linux - use appropriate Linux commands only.
             
             # Add assistant response to payload
             self.payload.append({"role": "assistant", "content": assistant_response})
+            
+            # Update conversation manager if available
+            if self.conversation_manager:
+                self.conversation_manager.update_payload(self.payload)
             
             return assistant_response, "".join(reasoning_chunk)
                 
@@ -279,7 +284,12 @@ It is VERY important to only use one of these responses, as if you reply with an
             assistant_response = "".join(reply_chunk)
             
             # Add assistant response to payload
+            # Add assistant response to payload
             self.payload.append({"role": "assistant", "content": assistant_response})
+            
+            # Update conversation manager if available
+            if self.conversation_manager:
+                self.conversation_manager.update_payload(self.payload)
             
             return assistant_response, "".join(reasoning_chunk)
                 
@@ -293,4 +303,8 @@ It is VERY important to only use one of these responses, as if you reply with an
     def clear_history(self):
         """Clear conversation history"""
         self.payload = [{"role": "system", "content": self._get_system_prompt()}]
+        
+        # Update conversation manager if available
+        if self.conversation_manager:
+            self.conversation_manager.clear_conversation()
         # self.console.print("[yellow]Conversation history cleared.[/yellow]")

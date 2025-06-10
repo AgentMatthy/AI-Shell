@@ -104,3 +104,10 @@ settings:
   payload_truncate_length: 1500  # Length to truncate long messages in payload display
   default_mode: ai
   show_welcome_message: false
+
+# Conversation Management Settings
+conversations:
+  auto_save_interval: 5  # Auto-save every N interactions
+  max_recent: 10  # Keep this many recent conversations
+  resume_on_startup: true  # Ask to resume previous session on startup
+  storage_path: "~/.ai-shell/conversations"  # Where to store conversation files
