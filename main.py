@@ -10,7 +10,6 @@ import sys
 import os
 import re
 import subprocess
-import time
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.prompt import Prompt
@@ -53,11 +52,11 @@ def main():
         ai_mode = settings.get("default_mode", "ai").lower() == "ai"
         
         # Variables for conversation tracking
-        rejudge = False
-        rejudge_count = 0
         retry_count = 0
         original_request = ""
         conversation_history = []
+        rejudge = False
+        rejudge_count = 0
         
         # Show welcome message if enabled in config
         if settings.get("show_welcome_message", True):
@@ -112,7 +111,6 @@ def main():
                         ui.console.print(f"\n[dim]Total messages: {len(chat_manager.payload)}[/dim]")
                         continue
 
-                    # Handle help command
                     # Handle help command
                     if user_input.lower() in ["/help", "/h", "help"]:
                         ui.show_help()
@@ -202,7 +200,7 @@ def main():
                     
                 # Generate AI response from current conversation context
                 # This will show "Processing..." then "Thinking..." status messages
-                response, reasoning = chat_manager.get_response_without_user_input()
+                response, _ = chat_manager.get_response_without_user_input()
                 
                 if not response:
                     # Response was interrupted or failed, reset state and continue

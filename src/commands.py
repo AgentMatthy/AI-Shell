@@ -5,14 +5,14 @@ import subprocess
 import atexit
 from rich.console import Console
 
-# Global shell process
-_shell_process = None
+# Global persistent shell process for command execution
+_persistent_shell = None
 
 def get_shell():
-    """Get or create the global shell process"""
-    global _shell_process
-    if _shell_process is None or _shell_process.poll() is not None:
-        _shell_process = subprocess.Popen(
+    """Get or create the global persistent shell process"""
+    global _persistent_shell
+    if _persistent_shell is None or _persistent_shell.poll() is not None:
+        _persistent_shell = subprocess.Popen(
             ['/bin/bash'],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -20,19 +20,19 @@ def get_shell():
             text=True,
             bufsize=1
         )
-    return _shell_process
+    return _persistent_shell
 
 def cleanup_shell():
-    """Clean up the shell process"""
-    global _shell_process
-    if _shell_process:
+    """Clean up the persistent shell process"""
+    global _persistent_shell
+    if _persistent_shell:
         try:
-            _shell_process.stdin.write('exit\n')
-            _shell_process.stdin.flush()
-            _shell_process.wait(timeout=2)
+            _persistent_shell.stdin.write('exit\n')
+            _persistent_shell.stdin.flush()
+            _persistent_shell.wait(timeout=2)
         except:
-            _shell_process.kill()
-        _shell_process = None
+            _persistent_shell.kill()
+        _persistent_shell = None
 
 def execute_command(command):
     """Execute a command in the persistent shell"""

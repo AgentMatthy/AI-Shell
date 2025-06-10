@@ -2,7 +2,6 @@
 
 import json
 import requests
-import time
 from rich.console import Console
 from openai import OpenAI
 
@@ -72,7 +71,7 @@ INFORMATION GATHERING:
 The host OS is Linux - use appropriate Linux commands only.
 """
     
-    def get_chat_response(self, user_input, system_prompt=None):
+    def get_chat_response(self, user_input):
         """Get response from the chat API with streaming"""
         try:
             # Add user message to payload
@@ -120,7 +119,7 @@ The host OS is Linux - use appropriate Linux commands only.
             if self.conversation_manager:
                 self.conversation_manager.update_payload(self.payload)
             
-            return assistant_response, "".join(reasoning_chunk)
+            return assistant_response, ""
                 
         except KeyboardInterrupt:
             self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
@@ -229,8 +228,11 @@ It is VERY important to only use one of these responses, as if you reply with an
                     stream=False
                 )
             
-            result = response.choices[0].message.content.strip()
-            return "[QUESTION]" in result
+            content = response.choices[0].message.content
+            if content:
+                result = content.strip()
+                return "[QUESTION]" in result
+            return False
             
         except Exception as e:
             self.console.print(f"[yellow]Warning: Question check failed: {e}[/yellow]")

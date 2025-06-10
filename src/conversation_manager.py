@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 
 import json
-import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from rich.console import Console
 from rich.table import Table
-from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 
 class ConversationManager:
@@ -58,21 +56,21 @@ class ConversationManager:
         """Generate a unique session ID"""
         return f"session_{int(time.time())}"
     
-    def _get_session_summary(self, payload: List[Dict]) -> str:
-        """Generate a brief summary of the conversation"""
-        if not payload:
+    def _get_session_summary(self, messages: List[Dict]) -> str:
+        """Generate a brief summary of the conversation based on first user message"""
+        if not messages:
             return "Empty conversation"
         
-        # Find the first user message
-        for message in payload:
+        # Find the first user message to use as summary
+        for message in messages:
             if message.get("role") == "user":
                 content = message.get("content", "")
-                # Truncate to first 50 characters
+                # Truncate to first 50 characters for display
                 if len(content) > 50:
                     return content[:47] + "..."
                 return content
         
-        return "System conversation"
+        return "System-only conversation"
     
     def _save_session_to_file(self, filepath: Path, session: Dict):
         """Save session data to a file"""

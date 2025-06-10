@@ -10,15 +10,17 @@ class ModelManager:
         self.current_model = config["models"]["response_model"]
     
     def get_model_display_name(self, model_alias):
-        """Get display name for a model alias"""
-        if "available" in self.config["models"] and model_alias in self.config["models"]["available"]:
-            return self.config["models"]["available"][model_alias].get("display_name", model_alias)
+        """Get human-readable display name for a model alias"""
+        available_models = self.config["models"].get("available", {})
+        if model_alias in available_models:
+            return available_models[model_alias].get("display_name", model_alias)
         return model_alias
     
     def get_api_model_name(self, model_alias):
-        """Get the actual API model name for a model alias"""
-        if "available" in self.config["models"] and model_alias in self.config["models"]["available"]:
-            return self.config["models"]["available"][model_alias]["name"]
+        """Get the actual API model name that should be sent to the API"""
+        available_models = self.config["models"].get("available", {})
+        if model_alias in available_models:
+            return available_models[model_alias]["name"]
         return model_alias
     
     def list_models(self):
