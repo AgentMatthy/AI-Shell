@@ -4,15 +4,15 @@ import re
 import subprocess
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Prompt
 from typing import Optional, List, Dict, Any
 
 from .config import load_config
 from .models import ModelManager
 from .chat import ChatManager
 from .ui import UIManager
-from .commands import execute_command, get_prompt_directory
+from .commands import execute_command
 from .conversation_manager import ConversationManager
+from .terminal_input import TerminalInput
 
 
 class AIShellApp:
@@ -24,6 +24,7 @@ class AIShellApp:
         self.model_manager: Optional[ModelManager] = None
         self.conversation_manager: Optional[ConversationManager] = None
         self.chat_manager: Optional[ChatManager] = None
+        self.terminal_input: Optional[TerminalInput] = None
         
         # Application state
         self.ai_mode = True
@@ -46,6 +47,7 @@ class AIShellApp:
             self.model_manager = ModelManager(self.config)
             self.conversation_manager = ConversationManager(self.config)
             self.chat_manager = ChatManager(self.config, self.model_manager, self.conversation_manager)
+            self.terminal_input = TerminalInput(self.config)
             
             # Load settings
             settings = self.config.get("settings", {})
@@ -119,16 +121,12 @@ class AIShellApp:
         self.retry_count = 0
     
     def _get_user_input(self):
-        """Get user input with appropriate prompt"""
-        current_dir = get_prompt_directory()
-        if self.ai_mode:
-            assert self.model_manager is not None
-            model_name = self.model_manager.get_model_display_name(self.model_manager.current_model)
-            self.ui.console.print(f"[bold blue]AI Shell [AI - {model_name}] [dim cyan]{current_dir}[/dim cyan] > [/bold blue]", end="")
-        else:
-            self.ui.console.print(f"[bold green]AI Shell [Direct] [dim cyan]{current_dir}[/dim cyan] > [/bold green]", end="")
+        """Get user input with enhanced terminal features"""
+        assert self.terminal_input is not None
+        assert self.model_manager is not None
         
-        return input().strip()
+        model_name = self.model_manager.get_model_display_name(self.model_manager.current_model)
+        return self.terminal_input.get_input(self.ai_mode, model_name)
     
     def _handle_input(self, user_input: str) -> str:
         """Handle user input and return action to take"""
@@ -178,7 +176,7 @@ class AIShellApp:
         if not self.ai_mode:
             success, result = execute_command(user_input)
             if not success and result.strip():
-                self.ui.console.print(f"[red]✗ Command failed[/red]")
+                self.ui.console.print(f"[red]Command failed[/red]")
             return "direct_command"
         
         # AI mode - process with AI
@@ -398,15 +396,14 @@ class AIShellApp:
         assert self.chat_manager is not None
         
         # Ask for confirmation
-        panel_content = f"[bold white]Execute command:[/bold white] [cyan]`{command}`[/cyan]\n\n[yellow]Proceed? [y/n] (y):[/yellow] "
-        self.ui.console.print(Panel(panel_content, title="[yellow]Command[/yellow]", border_style="yellow"), end="")
+        panel_content = f"[bold white]Execute command:[/bold white] [cyan]`{command}`[/cyan]"
+        self.ui.console.print(Panel(panel_content, title="[yellow]Command[/yellow]", border_style="yellow"))
         
-        user_choice = input().strip().lower()
-        if not user_choice:
-            user_choice = "y"
+        assert self.terminal_input is not None
+        user_choice = self.terminal_input.get_confirmation("Proceed? [y/n]", "y").lower()
         
         if user_choice.lower() == "n":
-            reason = Prompt.ask("Reason for decline")
+            reason = self.terminal_input.get_reason_input("Reason for decline")
             feedback_context = f"User declined to run the command: {command}\nReason: {reason}\n\nPlease provide an alternative approach to complete the original request: {self.original_request}"
             self.chat_manager.payload.append({"role": "user", "content": feedback_context})
             self.rejudge = True
@@ -464,7 +461,8 @@ class AIShellApp:
             self.rejudge = True
         else:
             self.ui.console.print(f"[yellow]Maximum retry attempts ({self.max_retries}) reached.[/yellow]")
-            retry_choice = Prompt.ask("Do you want to continue trying?", choices=["Y", "N"], default="N")
+            assert self.terminal_input is not None
+            retry_choice = self.terminal_input.get_confirmation("Do you want to continue trying? [Y/n]", "N").upper()
             if retry_choice == "Y":
                 self.retry_count = 0
                 with self.ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
