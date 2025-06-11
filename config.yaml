@@ -1,4 +1,4 @@
-# AI Agent Configuration File
+# AI Shell Configuration File
 # This file contains all the configuration settings for the AI terminal assistant
 
 # API Configuration - PRECONFIGURED FOR OPENROUTER.AI
@@ -9,10 +9,10 @@ api:
 # Models Configuration
 models:
   # Primary model for generating responses
-  response_model: claude-4
+  response_model: gemini-2.5-pro
   
   # Model for task completion checking (can be different for optimization)
-  task_checker_model: gemini-25
+  task_checker_model: maverick
   
   # Available models with aliases for easy switching
   available:
@@ -28,7 +28,7 @@ models:
     deepseek:
       name: "deepseek/deepseek-chat-v3-0324:free"
       alias: "deepseek"
-      display_name: "DeepSeek Chat V3"
+      display_name: "DeepSeek V3"
     hermes:
       name: "nousresearch/deephermes-3-mistral-24b-preview:free"
       alias: "hermes"
@@ -53,7 +53,7 @@ models:
       display_name: "Grok 3 Mini"
     gemini-25:
       name: "google/gemini-2.5-flash-preview-05-20"
-      alias: "gemini-25"
+      alias: "gemini-2.5-flash"
       display_name: "Gemini 2.5 Flash"
     hermes-405b:
       name: "nousresearch/hermes-3-llama-3.1-405b"

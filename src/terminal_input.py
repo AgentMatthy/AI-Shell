@@ -6,7 +6,6 @@ Provides arrow key navigation, tab completion, proper line editing, and command 
 """
 
 import os
-from typing import List, Optional, Callable
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import FileHistory

@@ -309,14 +309,14 @@ class AIShellApp:
         if self.original_request:
             self.chat_manager.payload.append({
                 "role": "user", 
-                "content": f"Task appears to be complete for: {self.original_request}. Please provide a brief summary of what was accomplished."
+                "content": f"SYSTEM MESSAGE: Task appears to be complete for: {self.original_request}. Please provide a brief summary of what was accomplished."
             })
             self.rejudge = True
             self.original_request = ""
         else:
             self.chat_manager.payload.append({
                 "role": "user", 
-                "content": "You provided an empty response. Please provide a proper response or explain why you cannot proceed."
+                "content": "SYSTEM MESSAGE: You provided an empty response. Please provide a proper response or explain why you cannot proceed."
             })
             self.rejudge = True
     
@@ -329,7 +329,7 @@ class AIShellApp:
             self.ui.console.print(f"[red]Multiple commands detected ({len(commands)} commands). Asking AI to correct.[/red]")
             self.chat_manager.payload.append({
                 "role": "user", 
-                "content": f"You provided {len(commands)} commands in one response, which is forbidden. You must provide EXACTLY ONE command per response. Please choose the FIRST command you need to execute and provide it alone with explanation."
+                "content": f"SYSTEM MESSAGE: You provided {len(commands)} commands in one response, which is forbidden. You must provide EXACTLY ONE command per response. Please choose the FIRST command you need to execute and provide it alone with explanation."
             })
             self.rejudge = True
             self.rejudge_count += 1
@@ -387,7 +387,7 @@ class AIShellApp:
                 completed, reason = self.chat_manager.check_task_status(conversation_context, self.original_request)
                 
                 if completed is False:
-                    continue_context = f"The original request ({self.original_request}) is not yet complete. Please continue with the next step."
+                    continue_context = f"SYSTEM MESSAGE: The original request ({self.original_request}) is not yet complete. Please continue with the next step."
                     self.chat_manager.payload.append({"role": "user", "content": continue_context})
                     self.rejudge = True
     
@@ -404,7 +404,7 @@ class AIShellApp:
         
         if user_choice.lower() == "n":
             reason = self.terminal_input.get_reason_input("Reason for decline")
-            feedback_context = f"User declined to run the command: {command}\nReason: {reason}\n\nPlease provide an alternative approach to complete the original request: {self.original_request}"
+            feedback_context = f"SYSTEM MESSAGE: User declined to run the command: {command}\nReason: {reason}\n\nPlease provide an alternative approach to complete the original request: {self.original_request}"
             self.chat_manager.payload.append({"role": "user", "content": feedback_context})
             self.rejudge = True
         else:
@@ -435,7 +435,7 @@ class AIShellApp:
         
         if completed is False:
             # Task needs more steps
-            continue_context = f"Command executed: {command}\nOutput: {result}\nSuccess: {success}\n\nThe original request ({self.original_request}) is not yet complete. Please continue with the next step."
+            continue_context = f"SYSTEM MESSAGE: Command executed: {command}\nOutput: {result}\nSuccess: {success}\n\nThe original request is not yet complete. Please continue with the next step."
             self.chat_manager.payload.append({"role": "user", "content": continue_context})
             self.rejudge = True
         elif completed is None:
@@ -444,7 +444,7 @@ class AIShellApp:
         else:
             # Task is complete
             with self.ui.console.status("[bold green]Preparing summary...[/bold green]", spinner_style="green"):
-                self.chat_manager.payload.append({"role": "user", "content": f"Task completed. Please provide a brief summary of what was accomplished for: {self.original_request}."})
+                self.chat_manager.payload.append({"role": "user", "content": f"SYSTEM MESSAGE: Task completed. Please provide a brief summary of what was accomplished, or answer if the original request was a question."})
             self.rejudge = True
             self.retry_count = 0
             self.original_request = ""
@@ -456,7 +456,7 @@ class AIShellApp:
         if self.retry_count < self.max_retries:
             self.retry_count += 1
             with self.ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
-                failure_context = f"Command executed but task status check failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nPlease try a different approach to complete: {self.original_request}"
+                failure_context = f"SYSTEM MESSAGE: Command executed but task status check failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nPlease try a different approach to complete: {self.original_request}"
                 self.chat_manager.payload.append({"role": "user", "content": failure_context})
             self.rejudge = True
         else:
@@ -466,11 +466,11 @@ class AIShellApp:
             if retry_choice == "Y":
                 self.retry_count = 0
                 with self.ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
-                    failure_context = f"Command executed but failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nUser requested to continue trying. Please try a different approach to complete: {self.original_request}"
+                    failure_context = f"SYSTEM MESSAGE: Command executed but failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nUser requested to continue trying. Please try a different approach to complete: {self.original_request}"
                     self.chat_manager.payload.append({"role": "user", "content": failure_context})
                 self.rejudge = True
             else:
                 with self.ui.console.status("[bold red]Preparing summary...[/bold red]", spinner_style="red"):
-                    self.chat_manager.payload.append({"role": "user", "content": f"Task failed after {self.max_retries} attempts and user chose to stop. Please provide a summary of what was attempted and suggest alternatives."})
+                    self.chat_manager.payload.append({"role": "user", "content": f"SYSTEM MESSAGE: Task failed after {self.max_retries} attempts and user chose to stop. Please provide a summary of what was attempted and suggest alternatives."})
                 self.rejudge = True
                 self.retry_count = 0
