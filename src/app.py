@@ -13,6 +13,7 @@ from .ui import UIManager
 from .commands import execute_command
 from .conversation_manager import ConversationManager
 from .terminal_input import TerminalInput
+from .web_search import WebSearchManager
 
 
 class AIShellApp:
@@ -25,6 +26,7 @@ class AIShellApp:
         self.conversation_manager: Optional[ConversationManager] = None
         self.chat_manager: Optional[ChatManager] = None
         self.terminal_input: Optional[TerminalInput] = None
+        self.web_search_manager: Optional[WebSearchManager] = None
         
         # Application state
         self.ai_mode = True
@@ -46,7 +48,8 @@ class AIShellApp:
             # Initialize managers
             self.model_manager = ModelManager(self.config)
             self.conversation_manager = ConversationManager(self.config)
-            self.chat_manager = ChatManager(self.config, self.model_manager, self.conversation_manager)
+            self.web_search_manager = WebSearchManager(self.config)
+            self.chat_manager = ChatManager(self.config, self.model_manager, self.conversation_manager, self.web_search_manager)
             self.terminal_input = TerminalInput(self.config)
             
             # Load settings
@@ -291,12 +294,22 @@ class AIShellApp:
             self._handle_empty_response()
             return
         
-        # Parse commands from response
+        # Parse commands and web searches from response
         command_pattern = re.compile(r"```command\s*(.*?)\s*```", re.DOTALL)
-        commands = command_pattern.findall(response)
+        websearch_pattern = re.compile(r"```websearch\s*(.*?)\s*```", re.DOTALL)
         
-        if commands:
+        commands = command_pattern.findall(response)
+        websearches = websearch_pattern.findall(response)
+        
+        # Check for multiple actions (commands + searches)
+        total_actions = len(commands) + len(websearches)
+        
+        if total_actions > 1:
+            self._handle_multiple_actions_response(total_actions)
+        elif commands:
             self._handle_command_response(response, commands)
+        elif websearches:
+            self._handle_websearch_response(response, websearches)
         else:
             self._handle_text_response(response)
     
@@ -320,25 +333,26 @@ class AIShellApp:
             })
             self.rejudge = True
     
+    def _handle_multiple_actions_response(self, total_actions):
+        """Handle response with multiple commands/searches"""
+        assert self.chat_manager is not None
+        
+        self.ui.console.print(f"[red]Multiple actions detected ({total_actions} commands/searches). Asking AI to correct.[/red]")
+        self.chat_manager.payload.append({
+            "role": "user", 
+            "content": f"SYSTEM MESSAGE: You provided {total_actions} commands/searches in one response, which is forbidden. You must provide EXACTLY ONE command OR search per response. Please choose the FIRST action you need to take and provide it alone with explanation."
+        })
+        self.rejudge = True
+        self.rejudge_count += 1
+        if self.rejudge_count > 3:
+            self.ui.console.print(f"[red]Too many multiple action violations. Resetting conversation.[/red]")
+            self.chat_manager.clear_history()
+            self.rejudge = False
+            self.rejudge_count = 0
+
     def _handle_command_response(self, response, commands):
         """Handle response containing commands"""
         assert self.chat_manager is not None
-        
-        # Check for multiple commands
-        if len(commands) > 1:
-            self.ui.console.print(f"[red]Multiple commands detected ({len(commands)} commands). Asking AI to correct.[/red]")
-            self.chat_manager.payload.append({
-                "role": "user", 
-                "content": f"SYSTEM MESSAGE: You provided {len(commands)} commands in one response, which is forbidden. You must provide EXACTLY ONE command per response. Please choose the FIRST command you need to execute and provide it alone with explanation."
-            })
-            self.rejudge = True
-            self.rejudge_count += 1
-            if self.rejudge_count > 3:
-                self.ui.console.print(f"[red]Too many multiple command violations. Resetting conversation.[/red]")
-                self.chat_manager.clear_history()
-                self.rejudge = False
-                self.rejudge_count = 0
-            return
         
         # Process single command
         self.rejudge = False
@@ -357,6 +371,28 @@ class AIShellApp:
             return
         
         self._execute_command_with_confirmation(command)
+
+    def _handle_websearch_response(self, response, websearches):
+        """Handle response containing web searches"""
+        assert self.chat_manager is not None
+        
+        # Process single web search
+        self.rejudge = False
+        self.rejudge_count = 0
+        
+        # Display response
+        md = Markdown(response)
+        self.ui.console.print()
+        self.ui.console.print(Panel(md, title="Response", border_style="blue"))
+        self.ui.console.print()
+        
+        # Execute web search
+        query = websearches[0].strip()
+        if not query:
+            self.ui.console.print("[yellow]Empty web search block detected.[/yellow]")
+            return
+        
+        self._execute_web_search(query)
     
     def _handle_text_response(self, response):
         """Handle text-only response"""
@@ -410,6 +446,45 @@ class AIShellApp:
         else:
             self._execute_and_process_command(command)
     
+    def _execute_web_search(self, query):
+        """Execute web search and process results"""
+        assert self.chat_manager is not None
+        assert self.web_search_manager is not None
+        
+        # Check if web search is available
+        if not self.web_search_manager.is_available():
+            self.ui.console.print("[red]Web search is not available. Please configure Tavily API key.[/red]")
+            return
+        
+        # Display search query
+        panel_content = f"[bold white]Web search query:[/bold white] [cyan]{query}[/cyan]"
+        self.ui.console.print(Panel(panel_content, title="[cyan]Web Search[/cyan]", border_style="cyan"))
+        
+        # Execute the search
+        search_response = self.web_search_manager.search(query)
+        
+        if search_response:
+            # Format results but don't display them to the user
+            formatted_results = self.web_search_manager.format_search_results(search_response)
+            
+            # Track conversation
+            self.conversation_history.append(f"Web Search: {query}")
+            self.conversation_history.append(f"Results: {formatted_results}")
+            
+            if len(self.conversation_history) > 10:
+                self.conversation_history = self.conversation_history[-10:]
+            
+            # Add search results to conversation context
+            search_context = f"SYSTEM MESSAGE: Web search executed for: {query}\n\nSearch Results:\n{formatted_results}\n\nPlease use this information to continue with the original request: {self.original_request}"
+            self.chat_manager.payload.append({"role": "user", "content": search_context})
+            self.rejudge = True
+        else:
+            # Search failed
+            self.ui.console.print("[red]Web search failed. Please try a different query or approach.[/red]")
+            search_failure_context = f"SYSTEM MESSAGE: Web search failed for query: {query}\n\nPlease try a different approach or rephrase the search query to complete the original request: {self.original_request}"
+            self.chat_manager.payload.append({"role": "user", "content": search_failure_context})
+            self.rejudge = True
+
     def _execute_and_process_command(self, command):
         """Execute command and process results"""
         assert self.chat_manager is not None

@@ -6,6 +6,16 @@ api:
   url: "https://openrouter.ai/api/v1"  # OpenRouter API endpoint
   api_key: "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"  # Your API key
 
+# Tavily Web Search Configuration
+tavily:
+  api_key: "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"  # Your Tavily API key - get it from https://tavily.com/
+  max_results: 3  # Maximum number of search results to return
+  search_depth: "advanced"  # Search depth: "basic" or "advanced"
+  include_answer: true  # Include AI-generated answer in search results
+  include_raw_content: false  # Include raw content from web pages
+  include_domains: []  # List of domains to include (empty = all domains)
+  exclude_domains: []  # List of domains to exclude
+
 # Models Configuration
 models:
   # Primary model for generating responses

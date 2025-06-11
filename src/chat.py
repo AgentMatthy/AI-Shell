@@ -6,10 +6,11 @@ from rich.console import Console
 from openai import OpenAI
 
 class ChatManager:
-    def __init__(self, config, model_manager, conversation_manager=None):
+    def __init__(self, config, model_manager, conversation_manager=None, web_search_manager=None):
         self.config = config
         self.model_manager = model_manager
         self.conversation_manager = conversation_manager
+        self.web_search_manager = web_search_manager
         self.console = Console()
         self.payload = [{"role": "system", "content": self._get_system_prompt()}]
         
@@ -21,8 +22,35 @@ class ChatManager:
     
     def _get_system_prompt(self):
         """Get the system prompt for the AI assistant"""
-        return """
-You are a Linux terminal assistant Agent. You can provide explanations and execute commands naturally.
+        web_search_info = ""
+        if self.web_search_manager and self.web_search_manager.is_available():
+            web_search_info = """
+
+WEB SEARCH CAPABILITY:
+You have access to web search functionality. When you need current information, documentation, or answers that are not available through local commands, use web search blocks like this:
+
+```websearch
+query terms here
+```
+
+Use web search when you need to:
+- Find current information about software, libraries, or technologies
+- Look up documentation, tutorials, or guides
+- Get answers to questions that require current knowledge
+- Find solutions to specific error messages or problems
+- Research best practices or current recommendations
+
+Example:
+"Let me search for the latest installation instructions for Docker:
+
+```websearch
+Docker installation Ubuntu 2024 latest
+```"
+
+IMPORTANT: Like commands, use ONLY ONE web search block per response."""
+        
+        return f"""
+You are a Linux terminal assistant Agent. You can provide explanations and execute commands naturally.{web_search_info}
 
 COMMAND FORMAT: When you need to run a command, use command blocks like this:
 
@@ -43,17 +71,18 @@ This will show all files including hidden ones."
 
 RULES:
 1. Use ```command blocks ONLY for commands you want executed
-2. You can mix explanations and commands naturally in the same response
-3. Each command block should contain exactly one command
-4. CRITICAL: Use ONLY ONE command block per response - NEVER multiple commands
-5. Always explain what the command will do
-6. After each command, wait to see the result before proceeding with additional commands
-7. Execute commands one at a time and analyze results before continuing
+2. Use ```websearch blocks ONLY for web searches when you need current information
+3. You can mix explanations and commands/searches naturally in the same response
+4. Each command or search block should contain exactly one command or query
+5. CRITICAL: Use ONLY ONE command OR search block per response - NEVER multiple
+6. Always explain what the command or search will do
+7. After each command/search, wait to see the result before proceeding
+8. Execute commands/searches one at a time and analyze results before continuing
 
 COMMAND EXECUTION STRATEGY:
-- Execute EXACTLY ONE command per response
+- Execute EXACTLY ONE command OR search per response
 - Wait for the result before deciding on the next step
-- Analyze command output before proceeding
+- Analyze command/search output before proceeding
 - Never assume commands will succeed - always check results first
 
 INFORMATION GATHERING:
@@ -65,6 +94,7 @@ INFORMATION GATHERING:
   * Hardware: 'lscpu', 'free -h', 'df -h', 'lsblk'
   * Network: 'ip addr', 'netstat', 'ss'
   * Processes: 'ps', 'top', 'systemctl'
+- When you need current information not available locally, USE WEB SEARCH
 - When multiple approaches exist and choice matters, ASK THE USER
 - Examples: "Do you want to install via apt, snap, or compile from source?"
 

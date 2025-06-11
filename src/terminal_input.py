@@ -127,7 +127,6 @@ class TerminalInput:
                 completer=self.completer,
                 complete_style=CompleteStyle.MULTI_COLUMN,
                 style=self.style,
-                mouse_support=True,
                 wrap_lines=True,
                 multiline=False,
                 vi_mode=self.settings.get("vi_mode", False),
