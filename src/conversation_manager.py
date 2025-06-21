@@ -43,7 +43,8 @@ class ConversationManager:
             "metadata": {
                 "original_request": "",
                 "status": "active",
-                "summary": ""
+                "summary": "",
+                "last_used": datetime.now().isoformat()
             }
         }
     
@@ -130,6 +131,7 @@ class ConversationManager:
         self.current_session = session
         self.current_session["metadata"]["status"] = "resumed"
         self.current_session["last_updated"] = datetime.now().isoformat()
+        self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
         
         payload = session.get("payload", [])
         
@@ -146,6 +148,9 @@ class ConversationManager:
         """Update current session with new payload data"""
         self.current_session["payload"] = payload
         self.current_session["last_updated"] = datetime.now().isoformat()
+        
+        # Always update last_used when payload is updated (active conversation)
+        self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
         
         if original_request and not self.current_session["metadata"]["original_request"]:
             self.current_session["metadata"]["original_request"] = original_request
@@ -226,6 +231,7 @@ class ConversationManager:
         self.current_session = session
         self.current_session["metadata"]["status"] = "loaded"
         self.current_session["last_updated"] = datetime.now().isoformat()
+        self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
         
         self.console.print(f"[green]✓ Loaded conversation '{name}'[/green]")
         return session.get("payload", [])
@@ -262,6 +268,102 @@ class ConversationManager:
             self.console.print("[yellow]No saved conversations found[/yellow]")
         else:
             self.console.print(table)
+
+    def list_recent_conversations(self):
+        """Display recent conversations with easy-to-use indices"""
+        table = Table(title="Recent Conversations")
+        table.add_column("#", style="yellow", width=3)
+        table.add_column("Last Used", style="dim")
+        table.add_column("Summary", style="white")
+        table.add_column("Messages", style="cyan", width=8)
+        
+        # Get recent conversations
+        recent_files = list(self.recent_path.glob("*.json"))
+        recent_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
+        if not recent_files:
+            self.console.print("[yellow]No recent conversations found[/yellow]")
+            return []
+        
+        # Store file mapping for loading
+        file_mapping = []
+        
+        for i, filepath in enumerate(recent_files, 1):
+            session = self._load_session_from_file(filepath)
+            if session:
+                file_mapping.append(filepath)
+                
+                # Get last used time (prefer last_used over last_updated)
+                last_used = session.get("metadata", {}).get("last_used", "")
+                if not last_used:
+                    last_used = session.get("last_updated", "")
+                
+                if last_used:
+                    try:
+                        date_obj = datetime.fromisoformat(last_used)
+                        now = datetime.now()
+                        time_diff = now - date_obj
+                        
+                        if time_diff.days > 0:
+                            date_str = f"{time_diff.days}d ago"
+                        elif time_diff.seconds > 3600:
+                            hours = time_diff.seconds // 3600
+                            date_str = f"{hours}h ago"
+                        elif time_diff.seconds > 60:
+                            minutes = time_diff.seconds // 60
+                            date_str = f"{minutes}m ago"
+                        else:
+                            date_str = "just now"
+                    except:
+                        date_str = "unknown"
+                else:
+                    date_str = "unknown"
+                
+                summary = session.get("metadata", {}).get("summary", "No summary")
+                if len(summary) > 50:
+                    summary = summary[:47] + "..."
+                
+                message_count = len(session.get("payload", []))
+                
+                table.add_row(str(i), date_str, summary, str(message_count))
+        
+        self.console.print(table)
+        self.console.print(f"\n[dim]Use '/load <number>' to load a conversation by its index number[/dim]")
+        return file_mapping
+    
+    def load_recent_conversation(self, index: int) -> Optional[List[Dict]]:
+        """Load a recent conversation by index from the list"""
+        recent_files = list(self.recent_path.glob("*.json"))
+        recent_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        
+        if not recent_files:
+            self.console.print("[yellow]No recent conversations found[/yellow]")
+            return None
+        
+        if index < 1 or index > len(recent_files):
+            self.console.print(f"[red]Invalid index. Please choose a number between 1 and {len(recent_files)}[/red]")
+            return None
+        
+        filepath = recent_files[index - 1]  # Convert to 0-based index
+        session = self._load_session_from_file(filepath)
+        
+        if not session:
+            self.console.print("[red]Failed to load conversation[/red]")
+            return None
+        
+        # Archive current session if it has content
+        if self.current_session["payload"]:
+            self._move_to_recent()
+        
+        # Load the recent session
+        self.current_session = session
+        self.current_session["metadata"]["status"] = "loaded"
+        self.current_session["last_updated"] = datetime.now().isoformat()
+        self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
+        
+        summary = session.get("metadata", {}).get("summary", "No summary")
+        self.console.print(f"[green]✓ Loaded recent conversation: {summary}[/green]")
+        return session.get("payload", [])
     
     def archive_conversation(self) -> bool:
         """Archive the current conversation"""
@@ -280,7 +382,7 @@ class ConversationManager:
         # Clear current session
         self._start_new_session()
         
-        self.console.print("[green]✓ Conversation archived[/green]")
+        self.console.print("[green]Conversation archived[/green]")
         return True
     
     def delete_conversation(self, name: Optional[str] = None) -> bool:
@@ -348,7 +450,8 @@ class ConversationManager:
             "metadata": {
                 "original_request": "",
                 "status": "active",
-                "summary": ""
+                "summary": "",
+                "last_used": datetime.now().isoformat()
             }
         }
         self.interaction_count = 0
@@ -382,13 +485,24 @@ class ConversationManager:
                 except:
                     pass
         
-        self.console.print("[green]✓ Conversation saved[/green]")
+        self.console.print("[green]Conversation saved[/green]")
     
     def get_status_info(self) -> Dict:
         """Get current conversation status information"""
+        last_used = self.current_session["metadata"].get("last_used", "")
+        if last_used:
+            try:
+                date_obj = datetime.fromisoformat(last_used)
+                last_used_formatted = date_obj.strftime("%Y-%m-%d %H:%M:%S")
+            except:
+                last_used_formatted = last_used
+        else:
+            last_used_formatted = "Never"
+        
         return {
             "session_id": self.current_session["id"],
             "started_at": self.current_session["started_at"],
+            "last_used": last_used_formatted,
             "message_count": len(self.current_session["payload"]),
             "interactions": self.interaction_count,
             "status": self.current_session["metadata"]["status"],

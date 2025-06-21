@@ -53,7 +53,7 @@ class WebSearchManager:
             include_domains = tavily_config.get("include_domains", [])
             exclude_domains = tavily_config.get("exclude_domains", [])
             
-            with self.console.status(f"[bold cyan]Searching web for: {query}[/bold cyan]", spinner_style="cyan"):
+            with self.console.status(f"[bold cyan]Searching...[/bold cyan]", spinner_style="cyan"):
                 # Build search parameters
                 search_params = {
                     "query": query,

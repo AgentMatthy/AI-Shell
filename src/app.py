@@ -226,13 +226,27 @@ class AIShellApp:
                 self.chat_manager.payload = new_payload
             return True
         elif user_input.lower().startswith("/load "):
-            name = user_input[6:].strip()
-            new_payload = self.conversation_manager.load_conversation(name)
-            if new_payload is not None:
-                self.chat_manager.payload = new_payload
+            try:
+                index_str = user_input[6:].strip()
+                if index_str.isdigit():
+                    index = int(index_str)
+                    new_payload = self.conversation_manager.load_recent_conversation(index)
+                    if new_payload is not None:
+                        self.chat_manager.payload = new_payload
+                else:
+                    # Try loading by name if it's not a number
+                    name = index_str
+                    new_payload = self.conversation_manager.load_conversation(name)
+                    if new_payload is not None:
+                        self.chat_manager.payload = new_payload
+            except ValueError:
+                self.ui.console.print("[red]Invalid number format[/red]")
             return True
         elif user_input.lower() in ["/conversations", "/cv"]:
             self.conversation_manager.list_conversations()
+            return True
+        elif user_input.lower() in ["/recent", "/r"]:
+            self.conversation_manager.list_recent_conversations()
             return True
         elif user_input.lower() == "/archive":
             if self.conversation_manager.archive_conversation():
@@ -270,6 +284,7 @@ class AIShellApp:
         self.ui.console.print(f"\n[bold cyan]Conversation Status:[/bold cyan]")
         self.ui.console.print(f"Session ID: {status['session_id']}")
         self.ui.console.print(f"Started: {status['started_at']}")
+        self.ui.console.print(f"Last Used: {status['last_used']}")
         self.ui.console.print(f"Messages: {status['message_count']}")
         self.ui.console.print(f"Interactions: {status['interactions']}")
         self.ui.console.print(f"Status: {status['status']}")
@@ -519,7 +534,7 @@ class AIShellApp:
         else:
             # Task is complete
             with self.ui.console.status("[bold green]Preparing summary...[/bold green]", spinner_style="green"):
-                self.chat_manager.payload.append({"role": "user", "content": f"SYSTEM MESSAGE: Task completed. Please provide a brief summary of what was accomplished, or answer if the original request was a question."})
+                self.chat_manager.payload.append({"role": "user", "content": f"SYSTEM MESSAGE: Task completed successfully. Command executed: {command}\nCommand output: {result}\nSuccess: {success}\n\nPlease provide a brief summary of what was accomplished based on the command output, or answer if the original request was a question."})
             self.rejudge = True
             self.retry_count = 0
             self.original_request = ""
