@@ -9,8 +9,6 @@ import sys
 import signal
 import termios
 import tty
-import shlex
-import re
 from rich.console import Console
 
 # Global persistent shell process for command execution
@@ -44,25 +42,8 @@ def cleanup_shell():
             _persistent_shell.kill()
         _persistent_shell = None
 
-def is_interactive_command(command):
-    """Check if a command is likely to be interactive"""
-    interactive_commands = [
-        'yay', 'pacman', 'apt', 'sudo', 'passwd', 'su', 'ssh', 'scp', 'ftp', 'sftp',
-        'mysql', 'psql', 'sqlite3', 'mongo', 'redis-cli', 'docker', 'kubectl',
-        'vim', 'nano', 'emacs', 'less', 'more', 'man', 'htop', 'top', 'watch',
-        'python', 'python3', 'node', 'npm', 'yarn', 'git', 'make', 'cmake'
-    ]
-    
-    # Check if command starts with any interactive command
-    cmd_parts = command.strip().split()
-    if cmd_parts:
-        base_cmd = cmd_parts[0]
-        return any(base_cmd.startswith(ic) or base_cmd.endswith(ic) for ic in interactive_commands)
-    
-    return False
-
-def execute_command_interactive(command):
-    """Execute an interactive command using pty for real terminal interaction"""
+def execute_command(command):
+    """Execute an interactive command using pty for real terminal interaction with directory persistence"""
     try:
         # Save current terminal settings
         old_settings = None
@@ -78,9 +59,15 @@ def execute_command_interactive(command):
         env['FORCE_COLOR'] = '1'
         env['COLORTERM'] = 'truecolor'
         
+        # Get the current working directory from our cache
+        start_cwd = get_current_directory()
+        
+        # Prepare the command to run in the correct directory
+        # We need to ensure the command starts from the current cached directory
+        wrapped_command = f"cd '{start_cwd}' && {command}"
+        
         process = subprocess.Popen(
-            command,
-            shell=True,
+            ['/bin/bash', '-c', wrapped_command],
             stdin=slave_fd,
             stdout=slave_fd,
             stderr=slave_fd,
@@ -147,7 +134,7 @@ def execute_command_interactive(command):
             if old_settings and sys.stdin.isatty():
                 termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
             
-            # Clean up
+            # Clean up the master fd
             os.close(master_fd)
             if process.poll() is None:
                 try:
@@ -159,6 +146,75 @@ def execute_command_interactive(command):
                     except:
                         pass
         
+        # After the interactive command completes, detect the final working directory
+        # We'll run a separate command to get the final directory after the command execution
+        try:
+            # Create a new pty session to get the final directory
+            detect_master_fd, detect_slave_fd = pty.openpty()
+            
+            # Run the same command sequence but with pwd at the end to detect final directory
+            detect_command = f"cd '{start_cwd}' && {command} >/dev/null 2>&1; pwd"
+            
+            detect_process = subprocess.Popen(
+                ['/bin/bash', '-c', detect_command],
+                stdin=detect_slave_fd,
+                stdout=detect_slave_fd,
+                stderr=detect_slave_fd,
+                env=env,
+                preexec_fn=os.setsid
+            )
+            
+            os.close(detect_slave_fd)
+            
+            # Read the output to get the final directory
+            final_dir_output = ""
+            try:
+                while detect_process.poll() is None:
+                    ready, _, _ = select.select([detect_master_fd], [], [], 0.1)
+                    if ready:
+                        data = os.read(detect_master_fd, 1024)
+                        if data:
+                            final_dir_output += data.decode('utf-8', errors='replace')
+                
+                # Read any remaining output
+                while True:
+                    ready, _, _ = select.select([detect_master_fd], [], [], 0.1)
+                    if not ready:
+                        break
+                    data = os.read(detect_master_fd, 1024)
+                    if not data:
+                        break
+                    final_dir_output += data.decode('utf-8', errors='replace')
+                    
+            except OSError:
+                pass
+            finally:
+                os.close(detect_master_fd)
+                if detect_process.poll() is None:
+                    try:
+                        os.killpg(os.getpgid(detect_process.pid), signal.SIGTERM)
+                        detect_process.wait(timeout=2)
+                    except:
+                        try:
+                            os.killpg(os.getpgid(detect_process.pid), signal.SIGKILL)
+                        except:
+                            pass
+            
+            # Extract the final directory from the output
+            final_dir_lines = final_dir_output.strip().split('\n')
+            if final_dir_lines:
+                final_dir = final_dir_lines[-1].strip()
+                if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
+                    # Directory changed, update our cache and sync the persistent shell
+                    sync_directory_to_shell(final_dir)
+                    
+        except Exception:
+            # If we can't detect the directory change, fall back to updating from persistent shell
+            try:
+                update_cached_directory()
+            except:
+                pass
+        
         output = ''.join(output_lines)
         success = exit_code == 0
         return success, output
@@ -166,81 +222,6 @@ def execute_command_interactive(command):
     except Exception as e:
         console = Console()
         console.print(f"[red]Error executing interactive command: {e}[/red]")
-        return False, str(e)
-
-def execute_command(command):
-    """Execute a command with appropriate method based on interactivity"""
-    console = Console()
-    
-    # # Check if this is likely an interactive command
-    # if is_interactive_command(command):
-    #     return execute_command_interactive(command)
-
-    return execute_command_interactive(command)
-    
-    # Use existing method for non-interactive commands with color support
-    try:
-        shell = get_shell()
-        
-        # Send command with a unique end marker, forcing color output
-        end_marker = f"__END__{os.getpid()}__"
-        full_command = f"FORCE_COLOR=1 COLORTERM=truecolor {command}; echo '{end_marker}'\n"
-        
-        if shell.stdin:
-            shell.stdin.write(full_command)
-            shell.stdin.flush()
-        else:
-            raise RuntimeError("Shell stdin is not available")
-        
-        # Read output until we see the end marker
-        output_lines = []
-        if not shell.stdout:
-            raise RuntimeError("Shell stdout is not available")
-            
-        while True:
-            line = shell.stdout.readline()
-            if not line:
-                break
-            
-            if end_marker in line:
-                break
-                
-            # Print with color support - don't strip ANSI codes
-            print(line, end='', flush=True)
-            output_lines.append(line)
-        
-        # Get exit code
-        if shell.stdin:
-            shell.stdin.write(f"echo $?; echo '{end_marker}'\n")
-            shell.stdin.flush()
-        else:
-            raise RuntimeError("Shell stdin is not available")
-        
-        exit_code = 0
-        while True:
-            if not shell.stdout:
-                break
-            line = shell.stdout.readline()
-            if not line:
-                break
-            
-            if end_marker in line:
-                break
-                
-            line = line.strip()
-            if line.isdigit():
-                exit_code = int(line)
-        
-        # Update cached directory if command might have changed it
-        # if any(cmd in command.lower() for cmd in ['cd ', 'pushd ', 'popd']):
-        update_cached_directory()
-        
-        output = ''.join(output_lines)
-        success = exit_code == 0
-        return success, output
-        
-    except Exception as e:
-        console.print(f"[red]Error executing command: {e}[/red]")
         return False, str(e)
 
 # Cache for current directory
@@ -272,6 +253,22 @@ def update_cached_directory():
                 _cached_directory = line
                 # Don't print this line - just consume it silently
                 
+    except:
+        pass
+
+def sync_directory_to_shell(new_directory):
+    """Sync both the cached directory and the persistent shell to a new directory"""
+    global _cached_directory
+    try:
+        # Update the cached directory
+        if os.path.exists(new_directory):
+            _cached_directory = new_directory
+            
+            # Sync the persistent shell to this directory
+            shell = get_shell()
+            if shell.stdin:
+                shell.stdin.write(f"cd '{new_directory}'\n")
+                shell.stdin.flush()
     except:
         pass
 
