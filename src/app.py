@@ -451,7 +451,7 @@ class AIShellApp:
         self.ui.console.print(Panel(panel_content, title="[yellow]Command[/yellow]", border_style="yellow"))
         
         assert self.terminal_input is not None
-        user_choice = self.terminal_input.get_confirmation("Proceed? [y/n]", "y").lower()
+        user_choice = self.terminal_input.get_confirmation("Execute? [Y/n]", "Y").lower()
         
         if user_choice.lower() == "n":
             reason = self.terminal_input.get_reason_input("Reason for decline")

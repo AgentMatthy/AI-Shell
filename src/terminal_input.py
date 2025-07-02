@@ -140,11 +140,12 @@ class TerminalInput:
     def get_confirmation(self, message: str, default: str = "y") -> str:
         """Get confirmation input with simpler prompt"""
         try:
-            return prompt(
+            result = prompt(
                 HTML(f'<prompt.ai>{message}</prompt.ai>'),
-                style=self.style,
-                default=default
+                style=self.style
             ).strip()
+            # Return default if empty input
+            return result if result else default
         except (KeyboardInterrupt, EOFError):
             raise
     
