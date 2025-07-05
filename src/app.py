@@ -158,6 +158,15 @@ class AIShellApp:
             self.ui.show_help()
             return "continue"
         
+        # Handle '!' prefix for direct command execution
+        if user_input.startswith("!"):
+            command = user_input[1:].strip()
+            if command:
+                success, result = execute_command(command)
+                if not success and result.strip():
+                    self.ui.console.print(f"[red]Command failed[/red]")
+            return "continue"
+        
         # Handle conversation management commands
         if self._handle_conversation_commands(user_input):
             return "continue"
