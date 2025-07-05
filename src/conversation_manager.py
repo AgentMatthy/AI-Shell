@@ -15,6 +15,7 @@ class ConversationManager:
     def __init__(self, config: Dict):
         self.config = config
         self.console = Console()
+        self.incognito_mode = False
         
         # Configuration settings
         conv_settings = config.get("conversations", {})
@@ -164,12 +165,23 @@ class ConversationManager:
         if self.interaction_count % self.auto_save_interval == 0:
             self._auto_save()
     
+    def set_incognito_mode(self, incognito_mode: bool):
+        """Set incognito mode state"""
+        self.incognito_mode = incognito_mode
+    
     def _auto_save(self):
         """Automatically save the current session"""
+        # Skip saving in incognito mode
+        if self.incognito_mode:
+            return
         self._save_session_to_file(self.active_path, self.current_session)
     
     def save_conversation(self, name: Optional[str] = None) -> bool:
         """Save current conversation with optional name"""
+        if self.incognito_mode:
+            self.console.print("[yellow]Cannot save conversations in incognito mode[/yellow]")
+            return False
+            
         if not self.current_session["payload"]:
             self.console.print("[yellow]No conversation to save[/yellow]")
             return False
@@ -416,6 +428,10 @@ class ConversationManager:
     def _move_to_recent(self):
         """Move current session to recent folder"""
         if not self.current_session["payload"]:
+            return
+        
+        # Skip saving in incognito mode
+        if self.incognito_mode:
             return
         
         recent_session = self.current_session.copy()

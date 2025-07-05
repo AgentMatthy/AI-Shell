@@ -12,12 +12,49 @@ class ChatManager:
         self.web_search_manager = web_search_manager
         self.console = Console()
         self.payload = [{"role": "system", "content": self._get_system_prompt()}]
+        self.incognito_mode = False
         
-        # Initialize OpenAI client
+        # Initialize OpenAI client (normal mode)
         self.client = OpenAI(
             api_key=config["api"]["api_key"], 
             base_url=config["api"]["url"]
         )
+        
+        # Initialize incognito client if enabled
+        self.incognito_client = None
+        self._init_incognito_client()
+    
+    def _init_incognito_client(self):
+        """Initialize the incognito mode client"""
+        try:
+            incognito_config = self.config.get("incognito", {})
+            if incognito_config.get("enabled", True):
+                api_config = incognito_config.get("api", {})
+                self.incognito_client = OpenAI(
+                    api_key=api_config.get("api_key", "ollama"),
+                    base_url=api_config.get("url", "http://localhost:11434/v1")
+                )
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Failed to initialize incognito client: {e}[/yellow]")
+    
+    def set_incognito_mode(self, incognito_mode: bool):
+        """Set incognito mode state"""
+        self.incognito_mode = incognito_mode
+    
+    def get_current_client(self):
+        """Get the appropriate client based on current mode"""
+        if self.incognito_mode and self.incognito_client:
+            return self.incognito_client
+        return self.client
+    
+    def get_current_model_name(self):
+        """Get the current model name based on mode"""
+        if self.incognito_mode:
+            incognito_config = self.config.get("incognito", {})
+            model_info = incognito_config.get("model", {})
+            return model_info.get("name", "llama3.2:latest")
+        else:
+            return self.model_manager.get_current_model_for_api()
     
     def _get_system_prompt(self):
         """Get the system prompt for the AI assistant"""
@@ -223,12 +260,13 @@ It is VERY important to only use one of these responses, as if you reply with an
     def _generate_response(self):
         """Internal method to generate response from current payload"""
         try:
-            # Get the current model name for the API request
-            model_name = self.model_manager.get_current_model_for_api()
+            # Get the current model name and client for the API request
+            model_name = self.get_current_model_name()
+            client = self.get_current_client()
             
             # Make streaming API request - shows "Processing..." during connection establishment
             with self.console.status("[bold cyan]Processing...[/bold cyan]", spinner_style="cyan"):
-                response = self.client.chat.completions.create(
+                response = client.chat.completions.create(
                     model=model_name, 
                     messages=self.payload, 
                     stream=True

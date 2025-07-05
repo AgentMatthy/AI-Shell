@@ -71,6 +71,20 @@ def _validate_and_normalize_config(config, console):
             }
         }
     
+    # Add incognito mode defaults if not present
+    if "incognito" not in config:
+        config["incognito"] = {
+            "enabled": True,
+            "api": {
+                "url": "http://localhost:11434/v1",
+                "api_key": "ollama"
+            },
+            "model": {
+                "name": "llama3.2:latest",
+                "display_name": "Llama 3.2"
+            }
+        }
+    
     return config
 
 def _validate_required_fields(config, console, required_fields):

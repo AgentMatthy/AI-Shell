@@ -30,6 +30,7 @@ class AIShellApp:
         
         # Application state
         self.ai_mode = True
+        self.incognito_mode = False
         self.max_retries = 10
         self.retry_count = 0
         self.original_request = ""
@@ -128,8 +129,15 @@ class AIShellApp:
         assert self.terminal_input is not None
         assert self.model_manager is not None
         
-        model_name = self.model_manager.get_model_display_name(self.model_manager.current_model)
-        return self.terminal_input.get_input(self.ai_mode, model_name)
+        if self.incognito_mode:
+            # Get incognito model display name
+            incognito_config = self.config.get("incognito", {})
+            model_info = incognito_config.get("model", {})
+            model_name = model_info.get("display_name", "Local Model")
+        else:
+            model_name = self.model_manager.get_model_display_name(self.model_manager.current_model)
+        
+        return self.terminal_input.get_input(self.ai_mode, model_name, self.incognito_mode)
     
     def _handle_input(self, user_input: str) -> str:
         """Handle user input and return action to take"""
@@ -180,6 +188,9 @@ class AIShellApp:
             return "switch_ai"
         elif user_input.lower() == "/dr":
             return "switch_direct"
+        elif user_input.lower() == "/inc":
+            self._toggle_incognito_mode()
+            return "continue"
         
         # Handle direct mode commands
         if not self.ai_mode:
@@ -286,6 +297,33 @@ class AIShellApp:
         self.ui.console.print(f"Status: {status['status']}")
         if status['original_request']:
             self.ui.console.print(f"Original request: {status['original_request']}")
+    
+    def _toggle_incognito_mode(self):
+        """Toggle incognito mode on/off"""
+        self.incognito_mode = not self.incognito_mode
+        
+        # Check if incognito is enabled in config
+        incognito_config = self.config.get("incognito", {})
+        if not incognito_config.get("enabled", True):
+            self.ui.console.print("[yellow]Incognito mode is disabled in configuration[/yellow]")
+            self.incognito_mode = False
+            return
+        
+        # Update ChatManager and ConversationManager incognito mode
+        if self.chat_manager:
+            self.chat_manager.set_incognito_mode(self.incognito_mode)
+        if self.conversation_manager:
+            self.conversation_manager.set_incognito_mode(self.incognito_mode)
+        
+        if self.incognito_mode:
+            # Get incognito model display name
+            model_info = incognito_config.get("model", {})
+            model_display = model_info.get("display_name", "Local Model")
+            self.ui.console.print(f"[bold magenta]🕶️  Incognito mode ON[/bold magenta] - Using {model_display}")
+            self.ui.console.print("[dim]Conversations will not be saved in incognito mode[/dim]")
+        else:
+            current_model = self.model_manager.get_model_display_name(self.model_manager.current_model)
+            self.ui.console.print(f"[bold cyan]👁️  Incognito mode OFF[/bold cyan] - Using {current_model}")
     
     
     def _process_ai_response(self):

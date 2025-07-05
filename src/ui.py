@@ -60,8 +60,16 @@ Type your requests and I'll help you execute commands.
 • [green]/clear[/green] - Clear conversation history
 • [green]/ai[/green] - Switch to AI mode
 • [green]/dr[/green] - Switch to direct mode
+• [green]/inc[/green] - Toggle incognito mode (private, local model)
 • [green]/p[/green] - Show conversation payload
 • [green]/exit[/green] or [green]/quit[/green] - Exit the program
+
+[yellow]Incognito Mode:[/yellow]
+• [magenta]/inc[/magenta] - Toggle incognito mode on/off
+• Uses local model (default: Ollama) for privacy
+• Conversations are not saved or stored
+• Purple prompt indicates incognito mode is active
+• Perfect for sensitive or private conversations
 
 [yellow]Conversation Management:[/yellow]
 • [green]/save[/green] - Save current conversation (will prompt for name)

@@ -121,3 +121,13 @@ conversations:
   max_recent: 10  # Keep this many recent conversations
   resume_on_startup: true  # Ask to resume previous session on startup
   storage_path: "~/.ai-shell/conversations"  # Where to store conversation files
+
+# Incognito Mode Configuration
+incognito:
+  enabled: true  # Enable/disable incognito mode functionality
+  api:
+    url: "http://localhost:11434/v1"  # Ollama API endpoint (local)
+    api_key: "ollama"  # Ollama doesn't require a real API key
+  model:
+    name: "artifish/llama3.2-uncensored"  # Local model name in Ollama
+    display_name: "Llama 3.2 Uncensored"  # Human-readable model name

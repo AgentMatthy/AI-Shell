@@ -86,19 +86,21 @@ class TerminalInput:
         # Define style for prompts
         self.style = Style.from_dict({
             'prompt.ai': '#0066cc bold',
-            'prompt.direct': '#00cc66 bold', 
+            'prompt.direct': '#00cc66 bold',
+            'prompt.incognito': '#8b3fbb bold',  # Purple for incognito mode
             'prompt.path': '#666666',
             'completion-menu.completion': 'bg:#008888 #ffffff',
             'completion-menu.completion.current': 'bg:#00aaaa #000000',
         })
     
-    def get_input(self, ai_mode: bool, model_name: str = "") -> str:
+    def get_input(self, ai_mode: bool, model_name: str = "", incognito_mode: bool = False) -> str:
         """
         Get user input with enhanced terminal features
         
         Args:
             ai_mode: Whether in AI mode or direct mode
             model_name: Current model name for display
+            incognito_mode: Whether in incognito mode
             
         Returns:
             User input string
@@ -106,7 +108,13 @@ class TerminalInput:
         current_dir = get_prompt_directory()
         
         # Build prompt message
-        if ai_mode:
+        if incognito_mode:
+            prompt_text = HTML(
+                f'<prompt.incognito>AI Shell [Incognito - {model_name}] </prompt.incognito>'
+                f'<prompt.path>{current_dir}</prompt.path>'
+                f'<prompt.incognito> > </prompt.incognito>'
+            )
+        elif ai_mode:
             prompt_text = HTML(
                 f'<prompt.ai>AI Shell [AI - {model_name}] </prompt.ai>'
                 f'<prompt.path>{current_dir}</prompt.path>'
