@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import json
+from pathlib import Path
 from rich.console import Console
 from openai import OpenAI
 
@@ -56,6 +57,28 @@ class ChatManager:
         else:
             return self.model_manager.get_current_model_for_api()
     
+    def _load_additional_instructions(self):
+        """Load additional instructions from context file next to config.yaml"""
+        try:
+            # Always look for context.md next to config.yaml in project root
+            project_root = Path(__file__).parent.parent  # Go up from src/ to project root
+            context_path = project_root / "context.md"
+            
+            # Check if file exists and read it
+            if context_path.exists() and context_path.is_file():
+                with open(context_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                
+                if content:
+                    return f"\n\nADDITIONAL GUIDELINES AND INFORMATION FROM THE USER:\n{content}"
+            
+            return ""
+            
+        except Exception as e:
+            # Silently handle errors - don't break the system if context file has issues
+            self.console.print(f"[yellow]Warning: Could not load context file: {e}[/yellow]")
+            return ""
+    
     def _get_system_prompt(self):
         """Get the system prompt for the AI assistant"""
         web_search_info = ""
@@ -86,6 +109,8 @@ Docker installation Ubuntu 2024 latest
 IMPORTANT: Like commands, use ONLY ONE web search block per response."""
 
 # ------------------------- #
+        
+        additional_instructions = self._load_additional_instructions()
         
         return f"""
 You are a Linux terminal assistant Agent. You can provide explanations and execute commands naturally.{web_search_info}
@@ -136,7 +161,7 @@ INFORMATION GATHERING:
 - When multiple approaches exist and choice matters, ASK THE USER
 - Examples: "Do you want to install via apt, snap, or compile from source?"
 
-The host OS is Linux - use appropriate Linux commands only.
+The host OS is Linux - use appropriate Linux commands only.{additional_instructions}
 """
     
     def get_chat_response(self, user_input):

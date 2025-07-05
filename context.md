@@ -1,0 +1,3 @@
+- My linux distro is Manjaro
+- My preferred package manager is pacman and yay
+- When installing a package, please use the "overwrite='*'" flag, because my packages may be somewhat corrupted
