@@ -2,218 +2,48 @@
 
 import os
 import subprocess
-import atexit
-import pty
-import select
-import sys
-import signal
-import termios
-import tty
 from rich.console import Console
 
-# Global persistent shell process for command execution
-_persistent_shell = None
-
-def get_shell():
-    """Get or create the global persistent shell process"""
-    global _persistent_shell
-    if _persistent_shell is None or _persistent_shell.poll() is not None:
-        _persistent_shell = subprocess.Popen(
-            ['/bin/bash'],
-            stdin=subprocess.PIPE,
+def execute_command(command):
+    """Execute a command and capture output while maintaining directory state"""
+    try:
+        # Get current working directory
+        current_dir = get_current_directory()
+        
+        # Create environment with color support
+        env = dict(os.environ)
+        env.update({
+            'TERM': 'xterm-256color',
+            'FORCE_COLOR': '1',
+            'COLORTERM': 'truecolor'
+        })
+        
+        # Execute command in current directory
+        process = subprocess.Popen(
+            ['/bin/bash', '-c', command],
+            cwd=current_dir,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1,
-            env=dict(os.environ, TERM='xterm-256color')  # Enable colors
-        )
-    return _persistent_shell
-
-def cleanup_shell():
-    """Clean up the persistent shell process"""
-    global _persistent_shell
-    if _persistent_shell:
-        try:
-            if _persistent_shell.stdin:
-                _persistent_shell.stdin.write('exit\n')
-                _persistent_shell.stdin.flush()
-            _persistent_shell.wait(timeout=2)
-        except:
-            _persistent_shell.kill()
-        _persistent_shell = None
-
-def execute_command(command):
-    """Execute an interactive command using pty for real terminal interaction with directory persistence"""
-    try:
-        # Save current terminal settings
-        old_settings = None
-        if sys.stdin.isatty():
-            old_settings = termios.tcgetattr(sys.stdin.fileno())
-        
-        # Create a pseudo-terminal
-        master_fd, slave_fd = pty.openpty()
-        
-        # Start the process with the slave end of the pty
-        env = dict(os.environ)
-        env['TERM'] = 'xterm-256color'  # Enable colors
-        env['FORCE_COLOR'] = '1'
-        env['COLORTERM'] = 'truecolor'
-        
-        # Get the current working directory from our cache
-        start_cwd = get_current_directory()
-        
-        # Prepare the command to run in the correct directory
-        # We need to ensure the command starts from the current cached directory
-        wrapped_command = f"cd '{start_cwd}' && {command}"
-        
-        process = subprocess.Popen(
-            ['/bin/bash', '-c', wrapped_command],
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            env=env,
-            preexec_fn=os.setsid
+            env=env
         )
         
-        # Close the slave end in the parent process
-        os.close(slave_fd)
-        
-        # Set terminal to raw mode if we're in a tty
-        if sys.stdin.isatty():
-            tty.setraw(sys.stdin.fileno())
-        
-        # Handle I/O between terminal and subprocess
+        # Read output line by line for real-time display
         output_lines = []
+        while True:
+            line = process.stdout.readline()
+            if not line and process.poll() is not None:
+                break
+            if line:
+                # Display output in real-time
+                print(line, end='')
+                output_lines.append(line)
         
-        try:
-            while process.poll() is None:
-                ready, _, _ = select.select([sys.stdin, master_fd], [], [], 0.1)
-                
-                if sys.stdin in ready:
-                    # Read from stdin and write to master
-                    try:
-                        data = os.read(sys.stdin.fileno(), 1024)
-                        if data:
-                            os.write(master_fd, data)
-                    except OSError:
-                        break
-                
-                if master_fd in ready:
-                    # Read from master and write to stdout
-                    try:
-                        data = os.read(master_fd, 1024)
-                        if data:
-                            decoded_data = data.decode('utf-8', errors='replace')
-                            sys.stdout.write(decoded_data)
-                            sys.stdout.flush()
-                            output_lines.append(decoded_data)
-                    except OSError:
-                        break
-            
-            # Wait for process to complete
-            exit_code = process.wait()
-            
-            # Read any remaining output
-            try:
-                while True:
-                    ready, _, _ = select.select([master_fd], [], [], 0.1)
-                    if not ready:
-                        break
-                    data = os.read(master_fd, 1024)
-                    if not data:
-                        break
-                    decoded_data = data.decode('utf-8', errors='replace')
-                    sys.stdout.write(decoded_data)
-                    sys.stdout.flush()
-                    output_lines.append(decoded_data)
-            except OSError:
-                pass
-            
-        finally:
-            # Restore terminal settings
-            if old_settings and sys.stdin.isatty():
-                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
-            
-            # Clean up the master fd
-            os.close(master_fd)
-            if process.poll() is None:
-                try:
-                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                    process.wait(timeout=2)
-                except:
-                    try:
-                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                    except:
-                        pass
+        # Wait for process to complete
+        exit_code = process.wait()
         
-        # After the interactive command completes, detect the final working directory
-        # We'll run a separate command to get the final directory after the command execution
-        try:
-            # Create a new pty session to get the final directory
-            detect_master_fd, detect_slave_fd = pty.openpty()
-            
-            # Run the same command sequence but with pwd at the end to detect final directory
-            detect_command = f"cd '{start_cwd}' && {command} >/dev/null 2>&1; pwd"
-            
-            detect_process = subprocess.Popen(
-                ['/bin/bash', '-c', detect_command],
-                stdin=detect_slave_fd,
-                stdout=detect_slave_fd,
-                stderr=detect_slave_fd,
-                env=env,
-                preexec_fn=os.setsid
-            )
-            
-            os.close(detect_slave_fd)
-            
-            # Read the output to get the final directory
-            final_dir_output = ""
-            try:
-                while detect_process.poll() is None:
-                    ready, _, _ = select.select([detect_master_fd], [], [], 0.1)
-                    if ready:
-                        data = os.read(detect_master_fd, 1024)
-                        if data:
-                            final_dir_output += data.decode('utf-8', errors='replace')
-                
-                # Read any remaining output
-                while True:
-                    ready, _, _ = select.select([detect_master_fd], [], [], 0.1)
-                    if not ready:
-                        break
-                    data = os.read(detect_master_fd, 1024)
-                    if not data:
-                        break
-                    final_dir_output += data.decode('utf-8', errors='replace')
-                    
-            except OSError:
-                pass
-            finally:
-                os.close(detect_master_fd)
-                if detect_process.poll() is None:
-                    try:
-                        os.killpg(os.getpgid(detect_process.pid), signal.SIGTERM)
-                        detect_process.wait(timeout=2)
-                    except:
-                        try:
-                            os.killpg(os.getpgid(detect_process.pid), signal.SIGKILL)
-                        except:
-                            pass
-            
-            # Extract the final directory from the output
-            final_dir_lines = final_dir_output.strip().split('\n')
-            if final_dir_lines:
-                final_dir = final_dir_lines[-1].strip()
-                if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
-                    # Directory changed, update our cache and sync the persistent shell
-                    sync_directory_to_shell(final_dir)
-                    
-        except Exception:
-            # If we can't detect the directory change, fall back to updating from persistent shell
-            try:
-                update_cached_directory()
-            except:
-                pass
+        # Update directory if command might have changed it
+        _update_directory_after_command(command, current_dir)
         
         output = ''.join(output_lines)
         success = exit_code == 0
@@ -221,56 +51,37 @@ def execute_command(command):
         
     except Exception as e:
         console = Console()
-        console.print(f"[red]Error executing interactive command: {e}[/red]")
+        console.print(f"[red]Error executing command: {e}[/red]")
         return False, str(e)
+
+def _update_directory_after_command(command, original_dir):
+    """Update cached directory if command might have changed it"""
+    # Check if command might change directory
+    cd_commands = ['cd', 'pushd', 'popd']
+    if any(cmd in command.split() for cmd in cd_commands):
+        try:
+            # Get the new directory by running pwd
+            result = subprocess.run(
+                ['/bin/bash', '-c', f"cd '{original_dir}' && {command} >/dev/null 2>&1 && pwd"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                new_dir = result.stdout.strip()
+                if new_dir and os.path.exists(new_dir) and new_dir != original_dir:
+                    _set_current_directory(new_dir)
+        except (subprocess.TimeoutExpired, Exception):
+            # If we can't detect directory change, keep original
+            pass
+
+def _set_current_directory(new_dir):
+    """Set the cached current directory"""
+    global _cached_directory
+    _cached_directory = new_dir
 
 # Cache for current directory
 _cached_directory = os.getcwd()
-
-def update_cached_directory():
-    """Update the cached directory from the shell"""
-    global _cached_directory
-    try:
-        shell = get_shell()
-        end_marker = f"__PWD__{os.getpid()}__"
-        
-        if not shell.stdin or not shell.stdout:
-            return
-            
-        shell.stdin.write(f"pwd; echo '{end_marker}'\n")
-        shell.stdin.flush()
-        
-        while True:
-            line = shell.stdout.readline()
-            if not line:
-                break
-                
-            if end_marker in line:
-                break
-                
-            line = line.strip()
-            if line and os.path.exists(line):
-                _cached_directory = line
-                # Don't print this line - just consume it silently
-                
-    except:
-        pass
-
-def sync_directory_to_shell(new_directory):
-    """Sync both the cached directory and the persistent shell to a new directory"""
-    global _cached_directory
-    try:
-        # Update the cached directory
-        if os.path.exists(new_directory):
-            _cached_directory = new_directory
-            
-            # Sync the persistent shell to this directory
-            shell = get_shell()
-            if shell.stdin:
-                shell.stdin.write(f"cd '{new_directory}'\n")
-                shell.stdin.flush()
-    except:
-        pass
 
 def get_current_directory():
     """Get current directory (cached)"""
@@ -294,6 +105,3 @@ def get_prompt_directory():
             display_dir = os.sep.join([parts[0], "...", parts[-2], parts[-1]])
     
     return display_dir
-
-# Register cleanup
-atexit.register(cleanup_shell)

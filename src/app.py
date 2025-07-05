@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import re
-import subprocess
 from rich.markdown import Markdown
 from rich.panel import Panel
 from typing import Optional, List, Dict, Any
@@ -27,6 +26,7 @@ class AIShellApp:
         self.chat_manager: Optional[ChatManager] = None
         self.terminal_input: Optional[TerminalInput] = None
         self.web_search_manager: Optional[WebSearchManager] = None
+        
         
         # Application state
         self.ai_mode = True
@@ -136,10 +136,6 @@ class AIShellApp:
         if not user_input:
             return "continue"
         
-        assert self.conversation_manager is not None
-        assert self.chat_manager is not None
-        assert self.model_manager is not None
-        
         # Handle exit commands
         if user_input.lower() in ["/exit", "exit", "quit", ";q", ":q", "/q"]:
             self.conversation_manager.save_and_exit()
@@ -147,6 +143,7 @@ class AIShellApp:
         
         # Handle clear command
         if user_input.lower() in ["/clear", "/new", "/reset", "/c", "clear"]:
+            import subprocess
             subprocess.run("clear", shell=True)
             self.chat_manager.clear_history()
             return "continue"
@@ -179,7 +176,7 @@ class AIShellApp:
         if not self.ai_mode:
             success, result = execute_command(user_input)
             if not success and result.strip():
-                self.ui.console.print(f"[red]Command failed[/red]")
+                self.ui.console.print(f"[red]✗ Command failed[/red]")
             return "direct_command"
         
         # AI mode - process with AI
@@ -187,9 +184,6 @@ class AIShellApp:
     
     def _show_payload(self):
         """Display current conversation payload"""
-        assert self.chat_manager is not None
-        assert self.config is not None
-        
         self.ui.console.print("\n[bold cyan]Current Conversation Payload:[/bold cyan]")
         for i, message in enumerate(self.chat_manager.payload):
             role_color = {
@@ -204,15 +198,13 @@ class AIShellApp:
             truncate_length = settings.get("payload_truncate_length", 500)
             if len(content) > truncate_length:
                 content = content[:truncate_length] + "... [truncated]"
+            from rich.panel import Panel
             self.ui.console.print(Panel(content, border_style=role_color))
         
         self.ui.console.print(f"\n[dim]Total messages: {len(self.chat_manager.payload)}[/dim]")
     
-    def _handle_conversation_commands(self, user_input: str) -> bool:
+    def _handle_conversation_commands(self, user_input):
         """Handle conversation management commands"""
-        assert self.conversation_manager is not None
-        assert self.chat_manager is not None
-        
         if user_input.lower() == "/save":
             self.conversation_manager.save_conversation()
             return True
@@ -262,10 +254,8 @@ class AIShellApp:
         
         return False
     
-    def _handle_model_commands(self, user_input: str) -> bool:
+    def _handle_model_commands(self, user_input):
         """Handle model management commands"""
-        assert self.model_manager is not None
-        
         if user_input.lower() in ["/models", "/model", "/m"]:
             self.model_manager.list_models()
             return True
@@ -278,18 +268,16 @@ class AIShellApp:
     
     def _show_status(self):
         """Show conversation status"""
-        assert self.conversation_manager is not None
-        
         status = self.conversation_manager.get_status_info()
         self.ui.console.print(f"\n[bold cyan]Conversation Status:[/bold cyan]")
         self.ui.console.print(f"Session ID: {status['session_id']}")
         self.ui.console.print(f"Started: {status['started_at']}")
-        self.ui.console.print(f"Last Used: {status['last_used']}")
         self.ui.console.print(f"Messages: {status['message_count']}")
         self.ui.console.print(f"Interactions: {status['interactions']}")
         self.ui.console.print(f"Status: {status['status']}")
         if status['original_request']:
             self.ui.console.print(f"Original request: {status['original_request']}")
+    
     
     def _process_ai_response(self):
         """Process AI response and handle commands"""

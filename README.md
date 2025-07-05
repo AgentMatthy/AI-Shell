@@ -1,6 +1,6 @@
 # AI Shell Assistant
 
-A sophisticated command-line AI assistant that provides intelligent terminal interaction through natural language processing. This tool enables users to execute commands, get explanations, and receive AI-powered assistance directly from their terminal environment.
+This tool enables users to execute commands, get explanations, and receive AI-powered assistance directly from their terminal environment.
 
 ## Table of Contents
 

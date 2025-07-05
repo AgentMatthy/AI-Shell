@@ -437,8 +437,8 @@ class ConversationManager:
             for old_file in recent_files[:-self.max_recent]:
                 try:
                     old_file.unlink()
-                except:
-                    pass
+                except (OSError, PermissionError) as e:
+                    self.console.print(f"[yellow]Warning: Could not delete old conversation file {old_file.name}: {e}[/yellow]")
     
     def _start_new_session(self):
         """Start a new conversation session"""

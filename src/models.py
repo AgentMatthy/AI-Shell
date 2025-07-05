@@ -7,7 +7,11 @@ class ModelManager:
     def __init__(self, config):
         self.config = config
         self.console = Console()
-        self.current_model = config["models"]["response_model"]
+        try:
+            self.current_model = config["models"]["response_model"]
+        except KeyError as e:
+            self.console.print(f"[red]Error: Missing required model configuration: {e}[/red]")
+            raise
     
     def get_model_display_name(self, model_alias):
         """Get human-readable display name for a model alias"""
@@ -20,7 +24,11 @@ class ModelManager:
         """Get the actual API model name that should be sent to the API"""
         available_models = self.config["models"].get("available", {})
         if model_alias in available_models:
-            return available_models[model_alias]["name"]
+            try:
+                return available_models[model_alias]["name"]
+            except KeyError as e:
+                self.console.print(f"[red]Error: Model configuration missing 'name' field for {model_alias}: {e}[/red]")
+                return model_alias
         return model_alias
     
     def list_models(self):
@@ -37,7 +45,7 @@ class ModelManager:
                 table.add_row(
                     alias,
                     model_info.get("display_name", alias),
-                    model_info["name"],
+                    model_info.get("name", "N/A"),
                     current_marker
                 )
         else:
@@ -64,5 +72,10 @@ class ModelManager:
     
     def get_task_checker_model_for_api(self):
         """Get the API model name for the task checker"""
-        task_checker_model = self.config["models"]["task_checker_model"]
-        return self.get_api_model_name(task_checker_model)
+        try:
+            task_checker_model = self.config["models"]["task_checker_model"]
+            return self.get_api_model_name(task_checker_model)
+        except KeyError as e:
+            self.console.print(f"[red]Error: Missing task_checker_model configuration: {e}[/red]")
+            # Fallback to response model
+            return self.get_api_model_name(self.current_model)

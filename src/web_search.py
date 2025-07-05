@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-import json
 from typing import Dict, Any, Optional
 from rich.console import Console
 

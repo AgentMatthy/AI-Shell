@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import json
-import requests
 from rich.console import Console
 from openai import OpenAI
 
@@ -109,58 +108,20 @@ The host OS is Linux - use appropriate Linux commands only.
             # Add user message to payload
             self.payload.append({"role": "user", "content": user_input})
             
-            # Get the current model for API
-            model_name = self.model_manager.get_current_model_for_api()
-            
-            # Make streaming API request
-            response = self.client.chat.completions.create(
-                model=model_name, 
-                messages=self.payload, 
-                stream=True
-            )
-            
-            reply_chunk = []
-            reasoning_chunk = []
-            full_reply = ""
-            has_reasoning = False
-            
-            with self.console.status("[bold green]Thinking...[/bold green]") as status:
-                for chunk in response:
-                    if chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        reply_chunk.append(content)
-                        full_reply += content
-                    
-                    if hasattr(chunk.choices[0].delta, 'reasoning_content'):
-                        reasoning_content = getattr(chunk.choices[0].delta, 'reasoning_content', None)
-                        if reasoning_content:
-                            has_reasoning = True
-                            reasoning_chunk.append(reasoning_content)
-                            status.stop()
-                            print(reasoning_content, end="")
-                        
-            if has_reasoning:
-                print()
-            
-            assistant_response = "".join(reply_chunk)
-            
-            # Add assistant response to payload
-            self.payload.append({"role": "assistant", "content": assistant_response})
-            
-            # Update conversation manager if available
-            if self.conversation_manager:
-                self.conversation_manager.update_payload(self.payload)
-            
-            return assistant_response, ""
+            # Generate response using the same method as get_response_without_user_input
+            return self._generate_response()
                 
         except KeyboardInterrupt:
-            self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
             # Remove the user message from payload since we're cancelling
             if self.payload and self.payload[-1]["role"] == "user":
                 self.payload.pop()
+            self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
             return None, None
         except Exception as e:
-            self.console.print(f"[red]Unexpected error: {e}[/red]")
+            # Remove the user message from payload since we're cancelling
+            if self.payload and self.payload[-1]["role"] == "user":
+                self.payload.pop()
+            self.console.print(f"[red]Error generating chat response: {e}[/red]")
             return None, None
     
     def check_task_status(self, command_output, original_request):
@@ -181,43 +142,26 @@ Do not include any other text or formatting."""
             # Use task checker model
             model_name = self.model_manager.get_task_checker_model_for_api()
             
-            payload = {
-                "model": model_name,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream": False
-            }
-            
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.config['api']['api_key']}"
-            }
-            
             with self.console.status("[bold bright_black]Checking...[/bold bright_black]", spinner_style="bright_black"):
-                response = requests.post(
-                    f"{self.config['api']['url']}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                    timeout=30
+                response = self.client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    stream=False
                 )
             
-            if response.status_code == 200:
-                data = response.json()
-                result_text = data["choices"][0]["message"]["content"].strip()
-                
-                # Try to parse JSON response
-                try:
-                    result = json.loads(result_text)
-                    return result.get("completed", False), result.get("reason", "No reason provided")
-                except json.JSONDecodeError:
-                    # Fallback: look for completion indicators in the response
-                    result_lower = result_text.lower()
-                    if any(indicator in result_lower for indicator in ["completed", "success", "done", "finished"]):
-                        return True, result_text
-                    else:
-                        return False, result_text
-            else:
-                self.console.print(f"[yellow]Warning: Task status check failed (API Error {response.status_code})[/yellow]")
-                return None, "Task status check unavailable"
+            result_text = response.choices[0].message.content.strip()
+            
+            # Try to parse JSON response
+            try:
+                result = json.loads(result_text)
+                return result.get("completed", False), result.get("reason", "No reason provided")
+            except json.JSONDecodeError:
+                # Fallback: look for completion indicators in the response
+                result_lower = result_text.lower()
+                if any(indicator in result_lower for indicator in ["completed", "success", "done", "finished"]):
+                    return True, result_text
+                else:
+                    return False, result_text
                 
         except Exception as e:
             self.console.print(f"[yellow]Warning: Task status check failed: {e}[/yellow]")
@@ -318,7 +262,6 @@ It is VERY important to only use one of these responses, as if you reply with an
             assistant_response = "".join(reply_chunk)
             
             # Add assistant response to payload
-            # Add assistant response to payload
             self.payload.append({"role": "assistant", "content": assistant_response})
             
             # Update conversation manager if available
@@ -329,6 +272,15 @@ It is VERY important to only use one of these responses, as if you reply with an
                 
         except KeyboardInterrupt:
             self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
+            return None, None
+        except ConnectionError as e:
+            self.console.print(f"[red]Connection error: Unable to reach API server. {e}[/red]")
+            return None, None
+        except TimeoutError as e:
+            self.console.print(f"[red]Request timeout: API server took too long to respond. {e}[/red]")
+            return None, None
+        except json.JSONDecodeError as e:
+            self.console.print(f"[red]Invalid response format from API: {e}[/red]")
             return None, None
         except Exception as e:
             self.console.print(f"[red]Unexpected error in _generate_response: {e}[/red]")
