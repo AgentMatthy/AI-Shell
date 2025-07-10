@@ -9,8 +9,8 @@ A Linux terminal assistant that uses AI to execute commands and answer questions
    ```bash
    pip install -r requirements.txt
    ```
-3. Create your `config.yaml` (See [Configuration](###Configuration))
-4. Configure your `context.md` file (See [Context](###Context))
+3. Create your `config.yaml` (See [Configuration](#configuration))
+4. Configure your `context.md` file (See [Context](#context))
 5. Run the assistant:
    ```bash
    python main.py
