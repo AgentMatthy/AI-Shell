@@ -193,6 +193,6 @@ This is an example of a `context.md` file:
 
 ### Modes
 
-- **AI Mode** (default): Natural language requests processed by AI
+- **AI Mode** (`/ai`): Natural language requests processed by AI
 - **Direct Mode** (`/dr`): Commands executed directly without AI
 - **Incognito Mode** (`/inc`): Uses local Ollama model, conversations not saved
