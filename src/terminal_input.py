@@ -20,13 +20,30 @@ class AIShellCompleter(Completer):
     """Custom completer for AI shell commands and file paths"""
     
     def __init__(self):
-        # Define AI shell commands
-        self.ai_commands = [
-            '/exit', '/quit', '/clear', '/new', '/reset', '/help',
-            '/payload', '/save', '/load', '/conversations', '/cv',
-            '/archive', '/delete', '/status', '/models', '/model',
-            '/ai', '/dr'
-        ]
+        # Define AI shell commands with descriptions
+        self.ai_commands = {
+            '/exit': 'Exit the AI Shell',
+            '/quit': 'Exit the AI Shell',
+            '/clear': 'Clear conversation history and start fresh',
+            '/new': 'Clear conversation history and start fresh',
+            '/reset': 'Clear conversation history and start fresh',
+            '/help': 'Show help information',
+            '/payload': 'Display current conversation payload',
+            '/save': 'Save current conversation',
+            '/load': 'Load a saved conversation',
+            '/conversations': 'List all saved conversations',
+            '/cv': 'List all saved conversations',
+            '/archive': 'Archive current conversation',
+            '/delete': 'Delete a saved conversation',
+            '/status': 'Show conversation status',
+            '/models': 'List available models',
+            '/model': 'Switch to a different model',
+            '/ai': 'Switch to AI mode',
+            '/dr': 'Switch to Direct mode',
+            '/inc': 'Toggle incognito mode',
+            '/recent': 'List recent conversations',
+            '/r': 'List recent conversations'
+        }
     
     def get_completions(self, document, complete_event):
         """Generate completions for the current input"""
@@ -35,9 +52,13 @@ class AIShellCompleter(Completer):
         
         # Complete AI shell commands
         if text.startswith('/'):
-            for cmd in self.ai_commands:
+            for cmd, description in self.ai_commands.items():
                 if cmd.startswith(word):
-                    yield Completion(cmd, start_position=-len(word))
+                    yield Completion(
+                        cmd, 
+                        start_position=-len(word),
+                        display=f"{cmd:<15} {description}"
+                    )
         
         # Complete file paths for regular commands
         elif word and ('/' in word or not text.strip().startswith('/')):
@@ -91,6 +112,7 @@ class TerminalInput:
             'prompt.path': '#666666',
             'completion-menu.completion': 'bg:#008888 #ffffff',
             'completion-menu.completion.current': 'bg:#00aaaa #000000',
+            'completion-menu.meta': '#888888',
         })
     
     def get_input(self, ai_mode: bool, model_name: str = "", incognito_mode: bool = False) -> str:
@@ -133,7 +155,7 @@ class TerminalInput:
                 prompt_text,
                 history=self.history,
                 completer=self.completer,
-                complete_style=CompleteStyle.MULTI_COLUMN,
+                complete_style=CompleteStyle.COLUMN,
                 style=self.style,
                 wrap_lines=True,
                 multiline=False,
