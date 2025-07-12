@@ -53,9 +53,22 @@ def execute_command(command):
         # Handle I/O between terminal and subprocess
         output_lines = []
         
+        # Track timing for timeout handling
+        import time
+        start_time = time.time()
+        last_output_time = start_time
+        timeout_seconds = 30  # Maximum time to wait for process completion
+        inactivity_timeout = 10  # Maximum time without output before checking if process is done
+        
         try:
             while process.poll() is None:
                 ready, _, _ = select.select([sys.stdin, master_fd], [], [], 0.1)
+                
+                # Check for timeouts
+                current_time = time.time()
+                if current_time - start_time > timeout_seconds:
+                    # Process has been running too long, force termination
+                    break
                 
                 if sys.stdin in ready:
                     # Read from stdin and write to master
@@ -75,18 +88,40 @@ def execute_command(command):
                             sys.stdout.write(decoded_data)
                             sys.stdout.flush()
                             output_lines.append(decoded_data)
+                            last_output_time = current_time
                     except OSError:
                         break
+                else:
+                    # No output received, check if we've been inactive too long
+                    if current_time - last_output_time > inactivity_timeout:
+                        # Check if process is actually still alive
+                        if process.poll() is not None:
+                            # Process has finished but we didn't detect it properly
+                            break
             
-            # Wait for process to complete
-            exit_code = process.wait()
+            # Wait for process to complete with timeout
+            try:
+                exit_code = process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                # Process didn't complete within timeout, force kill
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                    exit_code = process.wait(timeout=2)
+                except:
+                    try:
+                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                        exit_code = process.wait(timeout=1)
+                    except:
+                        exit_code = -1
             
             # Read any remaining output
             try:
-                while True:
+                remaining_reads = 0
+                while remaining_reads < 10:  # Limit the number of reads
                     ready, _, _ = select.select([master_fd], [], [], 0.1)
                     if not ready:
-                        break
+                        remaining_reads += 1
+                        continue
                     data = os.read(master_fd, 1024)
                     if not data:
                         break
@@ -94,6 +129,7 @@ def execute_command(command):
                     sys.stdout.write(decoded_data)
                     sys.stdout.flush()
                     output_lines.append(decoded_data)
+                    remaining_reads = 0  # Reset counter if we got data
             except OSError:
                 pass
             
@@ -114,71 +150,30 @@ def execute_command(command):
                     except:
                         pass
         
-        # After the interactive command completes, detect the final working directory
-        # We'll run a separate command to get the final directory after the command execution
-        try:
-            # Create a new pty session to get the final directory
-            detect_master_fd, detect_slave_fd = pty.openpty()
-            
-            # Run the same command sequence but with pwd at the end to detect final directory
-            detect_command = f"cd '{start_cwd}' && {command} >/dev/null 2>&1; pwd"
-            
-            detect_process = subprocess.Popen(
-                ['/bin/bash', '-c', detect_command],
-                stdin=detect_slave_fd,
-                stdout=detect_slave_fd,
-                stderr=detect_slave_fd,
-                env=env,
-                preexec_fn=os.setsid
-            )
-            
-            os.close(detect_slave_fd)
-            
-            # Read the output to get the final directory
-            final_dir_output = ""
+        # Handle directory detection more safely for sudo commands
+        # Skip directory detection for sudo commands to avoid re-execution issues
+        if not command.strip().startswith('sudo'):
             try:
-                while detect_process.poll() is None:
-                    ready, _, _ = select.select([detect_master_fd], [], [], 0.1)
-                    if ready:
-                        data = os.read(detect_master_fd, 1024)
-                        if data:
-                            final_dir_output += data.decode('utf-8', errors='replace')
+                # For non-sudo commands, detect directory changes with a simple pwd check
+                detect_command = f"cd '{start_cwd}' && {command} >/dev/null 2>&1; pwd"
                 
-                # Read any remaining output
-                while True:
-                    ready, _, _ = select.select([detect_master_fd], [], [], 0.1)
-                    if not ready:
-                        break
-                    data = os.read(detect_master_fd, 1024)
-                    if not data:
-                        break
-                    final_dir_output += data.decode('utf-8', errors='replace')
-                    
-            except OSError:
+                detect_result = subprocess.run(
+                    ['/bin/bash', '-c', detect_command],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    cwd=start_cwd
+                )
+                
+                if detect_result.returncode == 0:
+                    final_dir = detect_result.stdout.strip()
+                    if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
+                        # Directory changed, update our cache
+                        _set_current_directory(final_dir)
+                        
+            except Exception:
+                # If we can't detect the directory change, that's ok
                 pass
-            finally:
-                os.close(detect_master_fd)
-                if detect_process.poll() is None:
-                    try:
-                        os.killpg(os.getpgid(detect_process.pid), signal.SIGTERM)
-                        detect_process.wait(timeout=2)
-                    except:
-                        try:
-                            os.killpg(os.getpgid(detect_process.pid), signal.SIGKILL)
-                        except:
-                            pass
-            
-            # Extract the final directory from the output
-            final_dir_lines = final_dir_output.strip().split('\n')
-            if final_dir_lines:
-                final_dir = final_dir_lines[-1].strip()
-                if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
-                    # Directory changed, update our cache
-                    _set_current_directory(final_dir)
-                    
-        except Exception:
-            # If we can't detect the directory change, that's ok
-            pass
         
         output = ''.join(output_lines)
         success = exit_code == 0
