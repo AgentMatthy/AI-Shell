@@ -542,11 +542,6 @@ class AIShellApp:
         # Execute the command
         success, result = execute_command(command)
         
-        if not success and result.strip():
-            self.ui.console.print()
-            self.ui.console.print(Panel(result, title=f"Error: {command}", border_style="red"))
-            self.ui.console.print()
-        
         # Track conversation
         self.conversation_history.append(f"Command: {command}")
         self.conversation_history.append(f"Output: {result}")
