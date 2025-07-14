@@ -166,3 +166,46 @@ Type your requests and I'll help you execute commands.
     def show_info(self, info_message):
         """Display info message"""
         self.console.print(f"[cyan]{info_message}[/cyan]")
+    
+    def display_conversation_messages(self, payload):
+        """Display conversation messages in a readable format"""
+        if not payload:
+            return
+        
+        # Skip system messages and internal system messages for display
+        display_messages = []
+        for msg in payload:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            
+            # Skip system role messages
+            if role == "system":
+                continue
+            
+            # Skip user messages that are actually system-generated (start with "SYSTEM MESSAGE:")
+            if role == "user" and content.startswith("SYSTEM MESSAGE:"):
+                continue
+            
+            display_messages.append(msg)
+        
+        if not display_messages:
+            return
+        
+        self.console.print("\n[bold cyan]Previous conversation:[/bold cyan]")
+        
+        for message in display_messages:
+            role = message.get("role", "unknown")
+            content = message.get("content", "")
+            
+            if role == "user":
+                # Display user messages with a different style
+                self.console.print(f"\n[bold green]You:[/bold green]")
+                self.console.print(f"[white]{content}[/white]")
+            elif role == "assistant":
+                # Display assistant messages with markdown formatting
+                from rich.markdown import Markdown
+                self.console.print(f"\n[bold blue]Assistant:[/bold blue]")
+                md = Markdown(content)
+                self.console.print(Panel(md, border_style="blue", padding=(0, 1)))
+        
+        self.console.print(f"\n[dim]--- End of previous conversation ({len(display_messages)} messages) ---[/dim]\n")

@@ -12,9 +12,10 @@ from rich.prompt import Confirm, Prompt
 class ConversationManager:
     """Manages conversation persistence, auto-save, and recovery"""
     
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, ui_manager=None):
         self.config = config
         self.console = Console()
+        self.ui_manager = ui_manager
         self.incognito_mode = False
         
         # Configuration settings
@@ -143,6 +144,10 @@ class ConversationManager:
             if original_request:
                 self.console.print(f"[dim]Original request: {original_request}[/dim]")
         
+        # Display the conversation messages if ui_manager is available
+        if self.ui_manager and payload:
+            self.ui_manager.display_conversation_messages(payload)
+        
         return payload
     
     def update_payload(self, payload: List[Dict], original_request: str = ""):
@@ -245,8 +250,14 @@ class ConversationManager:
         self.current_session["last_updated"] = datetime.now().isoformat()
         self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
         
+        payload = session.get("payload", [])
         self.console.print(f"[green]✓ Loaded conversation '{name}'[/green]")
-        return session.get("payload", [])
+        
+        # Display the conversation messages if ui_manager is available
+        if self.ui_manager and payload:
+            self.ui_manager.display_conversation_messages(payload)
+        
+        return payload
     
     def list_conversations(self):
         """Display all saved conversations"""
@@ -375,7 +386,13 @@ class ConversationManager:
         
         summary = session.get("metadata", {}).get("summary", "No summary")
         self.console.print(f"[green]✓ Loaded recent conversation: {summary}[/green]")
-        return session.get("payload", [])
+        
+        payload = session.get("payload", [])
+        # Display the conversation messages if ui_manager is available
+        if self.ui_manager and payload:
+            self.ui_manager.display_conversation_messages(payload)
+        
+        return payload
     
     def archive_conversation(self) -> bool:
         """Archive the current conversation"""

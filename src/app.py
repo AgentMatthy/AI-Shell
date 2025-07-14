@@ -48,7 +48,7 @@ class AIShellApp:
             
             # Initialize managers
             self.model_manager = ModelManager(self.config)
-            self.conversation_manager = ConversationManager(self.config)
+            self.conversation_manager = ConversationManager(self.config, self.ui)
             self.web_search_manager = WebSearchManager(self.config)
             self.chat_manager = ChatManager(self.config, self.model_manager, self.conversation_manager, self.web_search_manager)
             self.terminal_input = TerminalInput(self.config)
