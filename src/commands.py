@@ -114,26 +114,31 @@ def execute_command(command):
                     except:
                         pass
         
-        # Handle directory detection more safely for sudo commands
-        # Skip directory detection for sudo commands to avoid re-execution issues
+        # Detect directory changes after command execution
+        # This works for any command that might change the directory
         if not command.strip().startswith('sudo'):
             try:
-                # For non-sudo commands, detect directory changes with a simple pwd check
-                detect_command = f"cd '{start_cwd}' && {command} >/dev/null 2>&1; pwd"
+                # Check if this command could potentially change the directory
+                dir_changing_commands = ['cd', 'pushd', 'popd']
+                command_words = command.strip().split()
+                might_change_dir = any(cmd_word in dir_changing_commands for cmd_word in command_words)
                 
-                detect_result = subprocess.run(
-                    ['/bin/bash', '-c', detect_command],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    cwd=start_cwd
-                )
-                
-                if detect_result.returncode == 0:
-                    final_dir = detect_result.stdout.strip()
-                    if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
-                        # Directory changed, update our cache
-                        _set_current_directory(final_dir)
+                if might_change_dir:
+                    # Execute the command in a new shell session to detect the final directory
+                    # This approach works for all variants: cd, cd ~, cd .., cd /path, etc.
+                    final_dir_result = subprocess.run(
+                        ['/bin/bash', '-c', f"cd '{start_cwd}' && {command} 2>/dev/null && pwd"],
+                        capture_output=True,
+                        text=True,
+                        timeout=5,
+                        cwd=start_cwd
+                    )
+                    
+                    if final_dir_result.returncode == 0:
+                        final_dir = final_dir_result.stdout.strip()
+                        if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
+                            # Directory changed, update our cache
+                            _set_current_directory(final_dir)
                         
             except Exception:
                 # If we can't detect the directory change, that's ok
