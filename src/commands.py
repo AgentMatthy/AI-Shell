@@ -8,18 +8,85 @@ import sys
 import signal
 import termios
 import tty
+import shlex
 from rich.console import Console
+from typing import Tuple
 
-def execute_command(command):
+try:
+    from .logger import logger
+    from .constants import DANGEROUS_COMMAND_PATTERNS, DIR_CHANGING_COMMANDS, COMMAND_TIMEOUT
+except ImportError:
+    # Fallback for when running as standalone
+    logger = None
+    DANGEROUS_COMMAND_PATTERNS = [
+        'rm -rf /',
+        'rm -rf *',
+        'dd if=',
+        'mkfs.',
+        'fdisk',
+        'wipefs',
+        ':(){ :|: & };:',
+        'chmod 000',
+    ]
+    DIR_CHANGING_COMMANDS = ['cd', 'pushd', 'popd']
+    COMMAND_TIMEOUT = 5
+
+def validate_command(command: str) -> Tuple[bool, str]:
+    """Validate command for basic security checks"""
+    if not command or not command.strip():
+        return False, "Empty command"
+    
+    # Remove excessive whitespace
+    command = command.strip()
+    
+    # Check command length
+    if len(command) > 1000:  # Reasonable limit
+        return False, "Command too long"
+    
+    # Check for dangerous patterns (basic security)
+    command_lower = command.lower()
+    for pattern in DANGEROUS_COMMAND_PATTERNS:
+        if pattern in command_lower:
+            if logger:
+                logger.log_security_event("DANGEROUS_COMMAND", f"Blocked command: {command}")
+            return False, f"Potentially dangerous command pattern detected: {pattern}"
+    
+    # Log command validation
+    if logger:
+        logger.debug(f"Command validated: {command}")
+    return True, ""
+
+
+def execute_command(command: str) -> Tuple[bool, str]:
     """Execute an interactive command using pty for real terminal interaction with directory persistence"""
+    
+    # Validate command first
+    is_valid, validation_error = validate_command(command)
+    if not is_valid:
+        console = Console()
+        console.print(f"[red]Command validation failed: {validation_error}[/red]")
+        return False, f"Command validation failed: {validation_error}"
+    
     try:
         # Save current terminal settings
         old_settings = None
-        if sys.stdin.isatty():
-            old_settings = termios.tcgetattr(sys.stdin.fileno())
+        master_fd = None
+        process = None
+        
+        try:
+            if sys.stdin.isatty():
+                old_settings = termios.tcgetattr(sys.stdin.fileno())
+        except (OSError, termios.error) as e:
+            console = Console()
+            console.print(f"[yellow]Warning: Could not save terminal settings: {e}[/yellow]")
         
         # Create a pseudo-terminal
-        master_fd, slave_fd = pty.openpty()
+        try:
+            master_fd, slave_fd = pty.openpty()
+        except OSError as e:
+            console = Console()
+            console.print(f"[red]Error creating pseudo-terminal: {e}[/red]")
+            return False, f"Error creating pseudo-terminal: {e}"
         
         # Start the process with the slave end of the pty
         env = dict(os.environ)
@@ -30,25 +97,43 @@ def execute_command(command):
         # Get the current working directory from our cache
         start_cwd = get_current_directory()
         
+        # Validate the directory exists
+        if not os.path.exists(start_cwd) or not os.path.isdir(start_cwd):
+            console = Console()
+            console.print(f"[yellow]Warning: Cached directory {start_cwd} doesn't exist, using current working directory[/yellow]")
+            start_cwd = os.getcwd()
+            _set_current_directory(start_cwd)
+        
         # Prepare the command to run in the correct directory
         # We need to ensure the command starts from the current cached directory
         wrapped_command = f"cd '{start_cwd}' && {command}"
         
-        process = subprocess.Popen(
-            ['/bin/bash', '-c', wrapped_command],
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            env=env,
-            preexec_fn=os.setsid
-        )
+        try:
+            process = subprocess.Popen(
+                ['/bin/bash', '-c', wrapped_command],
+                stdin=slave_fd,
+                stdout=slave_fd,
+                stderr=slave_fd,
+                env=env,
+                preexec_fn=os.setsid
+            )
+        except (OSError, subprocess.SubprocessError) as e:
+            console = Console()
+            console.print(f"[red]Error starting process: {e}[/red]")
+            os.close(slave_fd)
+            os.close(master_fd)
+            return False, f"Error starting process: {e}"
         
         # Close the slave end in the parent process
         os.close(slave_fd)
         
         # Set terminal to raw mode if we're in a tty
-        if sys.stdin.isatty():
-            tty.setraw(sys.stdin.fileno())
+        try:
+            if sys.stdin.isatty():
+                tty.setraw(sys.stdin.fileno())
+        except (OSError, termios.error) as e:
+            console = Console()
+            console.print(f"[yellow]Warning: Could not set terminal to raw mode: {e}[/yellow]")
         
         # Handle I/O between terminal and subprocess
         output_lines = []
@@ -99,19 +184,29 @@ def execute_command(command):
             
         finally:
             # Restore terminal settings
-            if old_settings and sys.stdin.isatty():
-                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
+            try:
+                if old_settings and sys.stdin.isatty():
+                    termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_settings)
+            except (OSError, termios.error) as e:
+                # Don't break execution for terminal restoration issues
+                pass
             
             # Clean up the master fd
-            os.close(master_fd)
-            if process.poll() is None:
+            try:
+                if master_fd is not None:
+                    os.close(master_fd)
+            except OSError:
+                pass
+                
+            # Clean up process
+            if process and process.poll() is None:
                 try:
                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                     process.wait(timeout=2)
-                except:
+                except (OSError, subprocess.TimeoutExpired, ProcessLookupError):
                     try:
                         os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                    except:
+                    except (OSError, ProcessLookupError):
                         pass
         
         # Detect directory changes after command execution
@@ -119,26 +214,29 @@ def execute_command(command):
         if not command.strip().startswith('sudo'):
             try:
                 # Check if this command could potentially change the directory
-                dir_changing_commands = ['cd', 'pushd', 'popd']
                 command_words = command.strip().split()
-                might_change_dir = any(cmd_word in dir_changing_commands for cmd_word in command_words)
+                might_change_dir = any(cmd_word in DIR_CHANGING_COMMANDS for cmd_word in command_words)
                 
                 if might_change_dir:
                     # Execute the command in a new shell session to detect the final directory
                     # This approach works for all variants: cd, cd ~, cd .., cd /path, etc.
-                    final_dir_result = subprocess.run(
-                        ['/bin/bash', '-c', f"cd '{start_cwd}' && {command} 2>/dev/null && pwd"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        cwd=start_cwd
-                    )
-                    
-                    if final_dir_result.returncode == 0:
-                        final_dir = final_dir_result.stdout.strip()
-                        if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
-                            # Directory changed, update our cache
-                            _set_current_directory(final_dir)
+                    try:
+                        final_dir_result = subprocess.run(
+                            ['/bin/bash', '-c', f"cd '{start_cwd}' && {command} 2>/dev/null && pwd"],
+                            capture_output=True,
+                            text=True,
+                            timeout=COMMAND_TIMEOUT,
+                            cwd=start_cwd
+                        )
+                        
+                        if final_dir_result.returncode == 0:
+                            final_dir = final_dir_result.stdout.strip()
+                            if final_dir and os.path.exists(final_dir) and final_dir != get_current_directory():
+                                # Directory changed, update our cache
+                                _set_current_directory(final_dir)
+                    except (subprocess.TimeoutExpired, subprocess.SubprocessError, OSError):
+                        # If we can't detect the directory change, that's ok
+                        pass
                         
             except Exception:
                 # If we can't detect the directory change, that's ok
@@ -146,6 +244,11 @@ def execute_command(command):
         
         output = ''.join(output_lines)
         success = exit_code == 0
+        
+        # Log command execution
+        if logger:
+            logger.log_command_execution(command, success, output[:200] if output else "")
+        
         return success, output
         
     except Exception as e:

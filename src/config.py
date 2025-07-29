@@ -3,15 +3,31 @@
 import os
 import sys
 import yaml
+from typing import Dict, Any, List, Optional
 from rich.console import Console
 
-def load_config(config_path="config.yaml"):
+def load_config(config_path: str = "config.yaml") -> Optional[Dict[str, Any]]:
     """Load and validate configuration from YAML file"""
     console = Console()
     
     if not os.path.exists(config_path):
         console.print(f"[red]Error: Config file '{config_path}' not found![/red]")
         console.print(f"[yellow]Please create a config.yaml file with your API settings.[/yellow]")
+        sys.exit(1)
+    
+    # Check if file is readable
+    if not os.access(config_path, os.R_OK):
+        console.print(f"[red]Error: Config file '{config_path}' is not readable![/red]")
+        sys.exit(1)
+    
+    # Check file size (prevent loading massive files)
+    try:
+        file_size = os.path.getsize(config_path)
+        if file_size > 1024 * 1024:  # 1MB limit
+            console.print(f"[red]Error: Config file '{config_path}' is too large (>1MB)![/red]")
+            sys.exit(1)
+    except OSError as e:
+        console.print(f"[red]Error accessing config file '{config_path}': {e}[/red]")
         sys.exit(1)
     
     try:
@@ -29,7 +45,7 @@ def load_config(config_path="config.yaml"):
         console.print(f"[red]Error loading config: {e}[/red]")
         sys.exit(1)
 
-def _validate_and_normalize_config(config, console):
+def _validate_and_normalize_config(config: Dict[str, Any], console: Console) -> Dict[str, Any]:
     """Validate and normalize configuration, converting legacy formats"""
     
     # Handle different config formats and convert to modern dual-model format
@@ -87,7 +103,7 @@ def _validate_and_normalize_config(config, console):
     
     return config
 
-def _validate_required_fields(config, console, required_fields):
+def _validate_required_fields(config: Dict[str, Any], console: Console, required_fields: List[str]) -> None:
     """Validate that all required configuration fields are present and valid"""
     for field_path in required_fields:
         field_keys = field_path.split('.')
