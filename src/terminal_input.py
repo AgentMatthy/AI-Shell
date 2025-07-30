@@ -31,8 +31,8 @@ class AIShellCompleter(Completer):
             '/payload': 'Display current conversation payload',
             '/save': 'Save current conversation',
             '/load': 'Load a saved conversation',
-            '/conversations': 'List all saved conversations',
-            '/cv': 'List all saved conversations',
+            '/conversations': 'List all saved conversations (use -r to remove)',
+            '/cv': 'List all saved conversations (use -r to remove)',
             '/archive': 'Archive current conversation',
             '/delete': 'Delete a saved conversation',
             '/status': 'Show conversation status',
@@ -41,6 +41,7 @@ class AIShellCompleter(Completer):
             '/ai': 'Switch to AI mode',
             '/dr': 'Switch to Direct mode',
             '/inc': 'Toggle incognito mode',
+            '/compact': 'Compact command outputs in current payload',
             '/recent': 'List recent conversations',
             '/r': 'List recent conversations'
         }

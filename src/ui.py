@@ -61,6 +61,7 @@ Type your requests and I'll help you execute commands.
 • [green]/ai[/green] - Switch to AI mode
 • [green]/dr[/green] - Switch to direct mode
 • [green]/inc[/green] - Toggle incognito mode (private, local model)
+• [green]/compact[/green] - Compact command outputs in current payload (truncate long outputs)
 • [green]/p[/green] - Show conversation payload
 • [green]/exit[/green] or [green]/quit[/green] - Exit the program
 
@@ -71,14 +72,16 @@ Type your requests and I'll help you execute commands.
 • Purple prompt indicates incognito mode is active
 • Perfect for sensitive or private conversations
 
-[yellow]Conversation Management:[/yellow]
+        [yellow]Conversation Management:[/yellow]
 • [green]/save[/green] - Save current conversation (will prompt for name)
-• [green]/save <name>[/green] - Save current conversation with specific name
+• [green]/save <n>[/green] - Save current conversation with specific name
 • [green]/load[/green] - Load a saved conversation (will show list)
-• [green]/load <name>[/green] - Load specific conversation by name
-• [green]/conversations[/green] or [green]/cv[/green] - List all saved conversations
+• [green]/load <n>[/green] - Load specific conversation by name or index
+• [green]/conversations[/green] or [green]/conversation[/green] or [green]/cv[/green] - List all conversations (recent and saved)
+• [green]/conversations -r[/green] or [green]/cv -r[/green] - Remove/delete a saved conversation
+• [green]/recent[/green] or [green]/r[/green] - List recent conversations only
 • [green]/archive[/green] - Archive current conversation and start fresh
-• [green]/delete <name>[/green] - Delete a saved conversation
+• [green]/delete <n>[/green] - Delete a saved conversation
 • [green]/status[/green] - Show current conversation status
 
 [yellow]Tips:[/yellow]

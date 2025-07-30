@@ -191,6 +191,9 @@ class AIShellApp:
         elif user_input.lower() == "/inc":
             self._toggle_incognito_mode()
             return "continue"
+        elif user_input.lower() == "/compact":
+            self._compact_payload()
+            return "continue"
         
         # Handle direct mode commands
         if not self.ai_mode:
@@ -254,8 +257,18 @@ class AIShellApp:
             except ValueError:
                 self.ui.console.print("[red]Invalid number format[/red]")
             return True
-        elif user_input.lower() in ["/conversations", "/cv"]:
-            self.conversation_manager.list_conversations()
+        elif user_input.lower().startswith(("/conversations", "/conversation", "/cv")):
+            # Check for -r flag for removal
+            parts = user_input.split()
+            if len(parts) >= 2 and parts[1] == "-r":
+                # Handle removal - get conversation name if provided
+                name = parts[2] if len(parts) > 2 else None
+                self.conversation_manager.delete_conversation(name)
+            else:
+                # Default behavior - list conversations
+                self.conversation_manager.list_recent_conversations()
+                self.ui.console.print()  # Add some spacing
+                self.conversation_manager.list_conversations()
             return True
         elif user_input.lower() in ["/recent", "/r"]:
             self.conversation_manager.list_recent_conversations()
@@ -324,6 +337,89 @@ class AIShellApp:
         else:
             current_model = self.model_manager.get_model_display_name(self.model_manager.current_model)
             self.ui.console.print(f"[bold cyan]👁️  Incognito mode OFF[/bold cyan] - Using {current_model}")
+    
+    def _compact_payload(self):
+        """Compact all command output messages in the current payload"""
+        if not self.chat_manager or not self.chat_manager.payload:
+            self.ui.console.print("[yellow]No payload to compact[/yellow]")
+            return
+        
+        compacted_count = 0
+        
+        for message in self.chat_manager.payload:
+            if message.get("role") == "user" and "SYSTEM MESSAGE:" in message.get("content", ""):
+                original_content = message["content"]
+                compacted_content = self._truncate_system_message_outputs(original_content)
+                
+                if len(compacted_content) < len(original_content):
+                    message["content"] = compacted_content
+                    compacted_count += 1
+        
+        if compacted_count > 0:
+            self.ui.console.print(f"[bold green]📦 Compacted {compacted_count} command output messages in payload[/bold green]")
+            
+            # Update conversation manager if available
+            if self.conversation_manager:
+                self.conversation_manager.update_payload(self.chat_manager.payload)
+        else:
+            self.ui.console.print("[yellow]No command output messages found to compact[/yellow]")
+    
+    def _truncate_system_message_outputs(self, content: str, max_length: int = 500) -> str:
+        """Truncate command outputs within system messages"""
+        if not content or "Output:" not in content:
+            return content
+        
+        lines = content.split('\n')
+        result_lines = []
+        in_output_section = False
+        output_lines = []
+        
+        for line in lines:
+            if line.startswith("Output:"):
+                in_output_section = True
+                output_lines = [line]
+            elif in_output_section and (line.startswith("Success:") or line.startswith("Command output:") or line == ""):
+                # End of output section
+                output_text = '\n'.join(output_lines)
+                if len(output_text) > max_length:
+                    # Truncate the output
+                    truncated_output = output_text[:max_length]
+                    last_newline = truncated_output.rfind('\n')
+                    
+                    if last_newline > max_length * 0.7:
+                        truncated_output = output_text[:last_newline]
+                    
+                    truncated_output += "\n... [truncated by /compact command]"
+                    result_lines.append(truncated_output)
+                else:
+                    result_lines.extend(output_lines)
+                
+                in_output_section = False
+                output_lines = []
+                result_lines.append(line)
+            elif in_output_section:
+                output_lines.append(line)
+            else:
+                result_lines.append(line)
+        
+        # Handle case where output section continues to end of message
+        if in_output_section and output_lines:
+            output_text = '\n'.join(output_lines)
+            if len(output_text) > max_length:
+                truncated_output = output_text[:max_length]
+                last_newline = truncated_output.rfind('\n')
+                
+                if last_newline > max_length * 0.7:
+                    truncated_output = output_text[:last_newline]
+                
+                truncated_output += "\n... [truncated by /compact command]"
+                result_lines.append(truncated_output)
+            else:
+                result_lines.extend(output_lines)
+        
+        return '\n'.join(result_lines)
+    
+    
     
     
     def _process_ai_response(self):
