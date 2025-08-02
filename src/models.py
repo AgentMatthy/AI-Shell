@@ -70,12 +70,4 @@ class ModelManager:
         """Get the API model name for the current model"""
         return self.get_api_model_name(self.current_model)
     
-    def get_task_checker_model_for_api(self):
-        """Get the API model name for the task checker"""
-        try:
-            task_checker_model = self.config["models"]["task_checker_model"]
-            return self.get_api_model_name(task_checker_model)
-        except KeyError as e:
-            self.console.print(f"[red]Error: Missing task_checker_model configuration: {e}[/red]")
-            # Fallback to response model
-            return self.get_api_model_name(self.current_model)
+

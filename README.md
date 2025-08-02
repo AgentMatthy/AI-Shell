@@ -45,11 +45,8 @@ tavily:
 
 # Models Configuration
 models:
-  # Primary model for generating responses
+  # Primary model for generating responses and determining task completion
   response_model: gemini-2.5-pro
-  
-  # Model for task completion checking (should be a light, fast model, good at tool calling)
-  task_checker_model: grok
   
   # Available models with aliases for easy switching
   available:

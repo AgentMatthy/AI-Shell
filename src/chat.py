@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import json
+import subprocess
 from pathlib import Path
 from rich.console import Console
 from openai import OpenAI
@@ -132,6 +133,16 @@ ls -la /home
 
 This will show all files including hidden ones."
 
+RESPONSE TYPE TAGS: You must include one of these tags at the END of your response to indicate its type:
+- [QUESTION] - When your response asks a question that requires user input, choice, or clarification
+- [COMPLETE] - When you have provided a complete summary and think the task is fully done
+- No tag - When you want to continue with more actions or await command results
+
+Examples:
+- "Which directory would you like to search? [QUESTION]"
+- "The installation is complete and all files are properly configured. [COMPLETE]"
+- "Let me check the system status first:" (no tag - continuing with actions)
+
 RULES:
 1. Use ```command blocks ONLY for commands you want executed
 2. Use ```websearch blocks ONLY for web searches when you need current information or precise instructions (like documentation)
@@ -141,6 +152,7 @@ RULES:
 6. Always explain what the command or search will do
 7. After each command/search, wait to see the result before proceeding
 8. Execute commands/searches one at a time and analyze results before continuing
+9. ALWAYS end your response with the appropriate tag: [QUESTION], [COMPLETE], or no tag
 
 COMMAND EXECUTION STRATEGY:
 - Execute EXACTLY ONE command OR search per response
@@ -186,96 +198,60 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
             self.console.print(f"[red]Error generating chat response: {e}[/red]")
             return None, None
     
-    def check_task_status(self, command_output, original_request):
-        """Check if a task was completed successfully using the task checker model"""
-        try:
-            prompt = f"""You are a task completion checker. Analyze the command output and determine if the user's original request was successfully completed.
 
-Original request: {original_request}
-
-Command output:
-{command_output}
-
-Respond with ONLY a JSON object in this exact format:
-{{"completed": true/false, "reason": "brief explanation"}}
-
-Do not include any other text or formatting."""
-
-            # Use task checker model
-            model_name = self.model_manager.get_task_checker_model_for_api()
-            
-            with self.console.status("[bold bright_black]Checking...[/bold bright_black]", spinner_style="bright_black"):
-                response = self.client.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "user", "content": prompt}],
-                    stream=False
-                )
-            
-            result_text = response.choices[0].message.content.strip()
-            
-            # Try to parse JSON response
-            try:
-                result = json.loads(result_text)
-                return result.get("completed", False), result.get("reason", "No reason provided")
-            except json.JSONDecodeError:
-                # Fallback: look for completion indicators in the response
-                result_lower = result_text.lower()
-                if any(indicator in result_lower for indicator in ["completed", "success", "done", "finished"]):
-                    return True, result_text
-                else:
-                    return False, result_text
-                
-        except Exception as e:
-            self.console.print(f"[yellow]Warning: Task status check failed: {e}[/yellow]")
-            return None, "Task status check unavailable"
     
-    def check_if_question(self, ai_response):
-        """Check if the AI's response is asking a question that requires user input"""
+
+    
+    def parse_response_type(self, response):
+        """Parse response type from response tags"""
+        if not response:
+            return "continue"
+        
+        response_lower = response.lower().strip()
+        
+        if response_lower.endswith("[question]"):
+            return "question"
+        elif response_lower.endswith("[complete]"):
+            return "complete"
+        else:
+            return "continue"
+    
+    def is_question(self, response):
+        """Check if response contains a question tag"""
+        return self.parse_response_type(response) == "question"
+    
+    def is_complete(self, response):
+        """Check if response indicates task completion"""
+        return self.parse_response_type(response) == "complete"
+    
+    def strip_response_tags_for_display(self, response):
+        """Remove response tags from response for display purposes while keeping original in payload"""
+        if not response:
+            return response
+        
+        # Remove [QUESTION], [COMPLETE] tags from the end of the response
+        response_stripped = response.rstrip()
+        
+        if response_stripped.lower().endswith("[question]"):
+            return response_stripped[:-10].rstrip()
+        elif response_stripped.lower().endswith("[complete]"):
+            return response_stripped[:-10].rstrip()
+        
+        return response
+    
+    def send_system_notification(self, title, message):
+        """Send a system notification using notify-send"""
         try:
-            prompt = f"""You are analyzing an AI assistant's response to determine if it contains a question that requires user input.
-
-AI Response: {ai_response}
-
-Determine if this response contains a question that requires the user to provide input, make a choice, or clarify something.
-
-Examples of responses that ARE questions requiring user input:
-- "Which directory would you like to search?"
-- "Do you want to install via apt or snap?"
-- "What filename should I use?"
-- "Please specify the target directory"
-
-Examples of responses that are NOT questions requiring user input:
-- "Here's the information you requested"
-- "The command completed successfully"
-- "I found 3 files in the directory"
-- "The installation is complete"
-
-Respond with ONLY:
-- "[QUESTION]" - if the response requires user input
-- "[NO_QUESTION]" - if the response does not require user input
-
-It is VERY important to only use one of these responses, as if you reply with anything else, it will break the parsing."""
-
-            # Use task checker model for consistency
-            model_name = self.model_manager.get_task_checker_model_for_api()
-            
-            with self.console.status("[bold bright_black]Analyzing...[/bold bright_black]", spinner_style="bright_black"):
-                response = self.client.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "system", "content": prompt}],
-                    stream=False
-                )
-            
-            content = response.choices[0].message.content
-            if content:
-                result = content.strip()
-                return "[QUESTION]" in result
-            return False
-            
-        except Exception as e:
-            self.console.print(f"[yellow]Warning: Question check failed: {e}[/yellow]")
-            # Default to assuming it's not a question to avoid breaking the flow
-            return False
+            subprocess.run([
+                "notify-send", 
+                "--app-name=AI-Shell",
+                "--icon=dialog-information",
+                title, 
+                message
+            ], check=False, capture_output=True)
+        except Exception:
+            # Silently fail if notifications aren't available
+            pass
     
     def get_response_without_user_input(self):
         """Get response from the chat API without adding any new user input"""

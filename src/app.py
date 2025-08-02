@@ -37,6 +37,7 @@ class AIShellApp:
         self.conversation_history: List[str] = []
         self.rejudge = False
         self.rejudge_count = 0
+        self.auto_approve_commands = False
     
     def initialize(self):
         """Initialize all components"""
@@ -102,6 +103,8 @@ class AIShellApp:
                         continue
                     elif action == "process_ai":
                         self.original_request = user_input
+                        # Reset auto-approve state for new requests
+                        self.auto_approve_commands = False
                         # Add user input to payload
                         self.chat_manager.payload.append({"role": "user", "content": user_input})
                         self.conversation_manager.update_payload(self.chat_manager.payload, self.original_request)
@@ -504,8 +507,9 @@ class AIShellApp:
         self.rejudge = False
         self.rejudge_count = 0
         
-        # Display response
-        md = Markdown(response)
+        # Display response (strip tags for display while keeping original in payload)
+        display_response = self.chat_manager.strip_response_tags_for_display(response)
+        md = Markdown(display_response)
         self.ui.console.print()
         self.ui.console.print(Panel(md, title="Response", border_style="blue"))
         self.ui.console.print()
@@ -526,8 +530,9 @@ class AIShellApp:
         self.rejudge = False
         self.rejudge_count = 0
         
-        # Display response
-        md = Markdown(response)
+        # Display response (strip tags for display while keeping original in payload)
+        display_response = self.chat_manager.strip_response_tags_for_display(response)
+        md = Markdown(display_response)
         self.ui.console.print()
         self.ui.console.print(Panel(md, title="Response", border_style="blue"))
         self.ui.console.print()
@@ -547,8 +552,9 @@ class AIShellApp:
         self.rejudge = False
         self.rejudge_count = 0
         
-        # Display response
-        md = Markdown(response)
+        # Display response (strip tags for display while keeping original in payload)
+        display_response = self.chat_manager.strip_response_tags_for_display(response)
+        md = Markdown(display_response)
         self.ui.console.print()
         self.ui.console.print(Panel(md, title="Summary", border_style="blue"))
         self.ui.console.print()
@@ -561,14 +567,27 @@ class AIShellApp:
                 self.conversation_history = self.conversation_history[-10:]
             
             # Check if this is a question requiring user input
-            is_question = self.chat_manager.check_if_question(response)
+            is_question = self.chat_manager.is_question(response)
             
-            if not is_question:
+            if is_question:
+                # Send notification for questions
+                self.chat_manager.send_system_notification(
+                    "AI-Shell Question", 
+                    "The AI has a question and needs your input"
+                )
+            elif not is_question:
                 # Check if task is complete
-                conversation_context = "\n".join(self.conversation_history)
-                completed, reason = self.chat_manager.check_task_status(conversation_context, self.original_request)
+                is_complete = self.chat_manager.is_complete(response)
                 
-                if completed is False:
+                if is_complete:
+                    # Reset auto-approve state when task is complete
+                    self.auto_approve_commands = False
+                    # Send notification for completion
+                    self.chat_manager.send_system_notification(
+                        "AI-Shell Complete", 
+                        "The AI has completed the requested task"
+                    )
+                else:
                     continue_context = f"SYSTEM MESSAGE: The original request ({self.original_request}) is not yet complete. Please continue with the next step."
                     self.chat_manager.payload.append({"role": "user", "content": continue_context})
                     self.rejudge = True
@@ -577,14 +596,23 @@ class AIShellApp:
         """Execute command after user confirmation"""
         assert self.chat_manager is not None
         
+        # Skip confirmation if auto-approve is enabled
+        if self.auto_approve_commands:
+            self._execute_and_process_command(command)
+            return
+        
         # Ask for confirmation
         panel_content = f"[bold white]Execute command:[/bold white] [cyan]`{command}`[/cyan]"
         self.ui.console.print(Panel(panel_content, title="[yellow]Command[/yellow]", border_style="yellow"))
         
         assert self.terminal_input is not None
-        user_choice = self.terminal_input.get_confirmation("Execute? [Y/n]", "Y").lower()
+        user_choice = self.terminal_input.get_confirmation("Execute? [Y/n/a]", "Y").lower()
         
-        if user_choice.lower() == "n":
+        if user_choice in ["a", "all"]:
+            self.auto_approve_commands = True
+            self.ui.console.print("[green]Auto-approving all commands for this request[/green]")
+            self._execute_and_process_command(command)
+        elif user_choice == "n":
             reason = self.terminal_input.get_reason_input("Reason for decline")
             feedback_context = f"SYSTEM MESSAGE: User declined to run the command: {command}\nReason: {reason}\n\nPlease provide an alternative approach to complete the original request: {self.original_request}"
             self.chat_manager.payload.append({"role": "user", "content": feedback_context})
@@ -646,18 +674,30 @@ class AIShellApp:
         if len(self.conversation_history) > 10:
             self.conversation_history = self.conversation_history[-10:]
         
-        # Check task completion
-        completed, reason = self.chat_manager.check_task_status(result, self.original_request)
+        # Check task completion based on response type
+        is_complete = self.chat_manager.is_complete(result)
+        is_question = self.chat_manager.is_question(result)
         
-        if completed is False:
+        if is_question:
+            # Send notification for questions
+            self.chat_manager.send_system_notification(
+                "AI-Shell Question", 
+                "The AI has a question and needs your input"
+            )
+        
+        if not is_complete:
             # Task needs more steps
             continue_context = f"SYSTEM MESSAGE: Command executed: {command}\nOutput: {result}\nSuccess: {success}\n\nThe original request is not yet complete. Please continue with the next step."
             self.chat_manager.payload.append({"role": "user", "content": continue_context})
             self.rejudge = True
-        elif completed is None:
-            # Task failed
-            self._handle_task_failure(command, result, success)
         else:
+            # Task is complete - send notification
+            self.chat_manager.send_system_notification(
+                "AI-Shell Complete", 
+                "The AI has completed the requested task"
+            )
+            # Reset auto-approve state when task is complete
+            self.auto_approve_commands = False
             # Task is complete
             with self.ui.console.status("[bold green]Preparing summary...[/bold green]", spinner_style="green"):
                 self.chat_manager.payload.append({"role": "user", "content": f"SYSTEM MESSAGE: Task completed successfully. Command executed: {command}\nCommand output: {result}\nSuccess: {success}\n\nPlease provide a brief summary of what was accomplished based on the command output, or answer if the original request was a question."})

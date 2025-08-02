@@ -48,28 +48,27 @@ def load_config(config_path: str = "config.yaml") -> Optional[Dict[str, Any]]:
 def _validate_and_normalize_config(config: Dict[str, Any], console: Console) -> Dict[str, Any]:
     """Validate and normalize configuration, converting legacy formats"""
     
-    # Handle different config formats and convert to modern dual-model format
+    # Handle different config formats and convert to modern format
     if "models" in config:
-        if "response_model" in config["models"] and "task_checker_model" in config["models"]:
-            # Modern dual-model format - validate required fields
+        if "response_model" in config["models"]:
+            # Modern format - validate required fields
             _validate_required_fields(config, console, [
                 "api.url", "api.api_key", 
-                "models.response_model", "models.task_checker_model"
+                "models.response_model"
             ])
         elif "default" in config["models"]:
-            # Legacy multi-model format - convert to dual-model
+            # Legacy multi-model format - convert to modern
             _validate_required_fields(config, console, [
                 "api.url", "api.api_key", "models.default"
             ])
             
             default_model = config["models"]["default"]
             config["models"]["response_model"] = default_model
-            config["models"]["task_checker_model"] = default_model
         else:
             console.print(f"[red]Error: Invalid models configuration format[/red]")
             sys.exit(1)
     else:
-        # Legacy single model format - convert to dual-model
+        # Legacy single model format - convert to modern
         _validate_required_fields(config, console, [
             "api.url", "api.api_key", "api.model"
         ])
@@ -77,7 +76,6 @@ def _validate_and_normalize_config(config: Dict[str, Any], console: Console) -> 
         model_name = config["api"]["model"]
         config["models"] = {
             "response_model": "default",
-            "task_checker_model": "default",
             "available": {
                 "default": {
                     "name": model_name,
