@@ -2,6 +2,12 @@
 
 A Linux terminal assistant that uses AI to execute commands and answer questions through natural language.
 
+## Demo
+
+Check out AI Shell in action:
+
+![Demo Video](.github/aishelldemo.mp4)
+
 ## Setup
 
 1. Clone or download the project
