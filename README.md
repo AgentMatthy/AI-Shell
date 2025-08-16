@@ -1,6 +1,6 @@
-# AI Shell Assistant
+# AI Shell
 
-A Linux terminal assistant that uses AI to execute commands and answer questions through natural language.
+A Linux terminal agent that uses AI to execute commands and answer questions through natural language.
 
 ## Demo
 
@@ -10,16 +10,19 @@ Check out AI Shell in action:
 
 ## Setup
 
-1. Clone or download the project
-2. Install dependencies:
+(You will need Python 3 and pip installed)
+
+1. Download the binary from the [releases page](https://github.com/AgentMatthy/AI-Shell/releases)
+   (either the .whl or .tar.gz file)
+
+2. Install the package:
    ```bash
-   pip install -r requirements.txt
+   pip install ai-shell-1.0.0-py3-none-any.whl
    ```
-3. Create your `config.yaml` (See [Configuration](#configuration))
-4. Configure your `context.md` file (See [Context](#context))
-5. Run the assistant:
+
+3. Run the agent:
    ```bash
-   python main.py
+   ai-shell
    ```
 
 ### Configuration

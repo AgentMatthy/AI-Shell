@@ -59,15 +59,13 @@ class ChatManager:
             return self.model_manager.get_current_model_for_api()
     
     def _load_additional_instructions(self):
-        """Load additional instructions from context file next to config.yaml"""
+        """Load additional instructions from context file in ~/.config/ai-shell/"""
         try:
-            # Always look for context.md next to config.yaml in project root
-            project_root = Path(__file__).parent.parent  # Go up from src/ to project root
-            context_path = project_root / "context.md"
+            from .constants import CONTEXT_FILE_PATH
             
             # Check if file exists and read it
-            if context_path.exists() and context_path.is_file():
-                with open(context_path, 'r', encoding='utf-8') as f:
+            if CONTEXT_FILE_PATH.exists() and CONTEXT_FILE_PATH.is_file():
+                with open(CONTEXT_FILE_PATH, 'r', encoding='utf-8') as f:
                     content = f.read().strip()
                 
                 if content:
