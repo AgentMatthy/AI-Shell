@@ -1,0 +1,18 @@
+[project]
+name = "AI-Shell"
+version = "1.0.0"
+description = "An agentic AI terminal."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name="Matthy", email="csaki.mateki@gmail.com" }]
+dependencies = [
+    "openai>=1.0.0",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "tavily-python>=0.3.0",
+    "requests>=2.25.0",
+    "prompt_toolkit>=3.0.0",
+]
+
+[project.scripts]
+ai-shell = "ai_shell.main:main"

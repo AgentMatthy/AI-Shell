@@ -4,25 +4,30 @@ import os
 import sys
 import yaml
 from typing import Dict, Any, List, Optional
+from pathlib import Path
 from rich.console import Console
+from .constants import CONFIG_FILE_PATH
 
-def load_config(config_path: str = "config.yaml") -> Optional[Dict[str, Any]]:
+def load_config(config_path: Path = CONFIG_FILE_PATH) -> Optional[Dict[str, Any]]:
     """Load and validate configuration from YAML file"""
     console = Console()
     
-    if not os.path.exists(config_path):
+    # Ensure the config directory exists
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    if not config_path.exists():
         console.print(f"[red]Error: Config file '{config_path}' not found![/red]")
-        console.print(f"[yellow]Please create a config.yaml file with your API settings.[/yellow]")
+        console.print(f"[yellow]Please create a config.yaml file in ~/.config/ai-shell/ with your API settings.[/yellow]")
         sys.exit(1)
     
     # Check if file is readable
-    if not os.access(config_path, os.R_OK):
+    if not config_path.is_file() or not os.access(config_path, os.R_OK):
         console.print(f"[red]Error: Config file '{config_path}' is not readable![/red]")
         sys.exit(1)
     
     # Check file size (prevent loading massive files)
     try:
-        file_size = os.path.getsize(config_path)
+        file_size = config_path.stat().st_size
         if file_size > 1024 * 1024:  # 1MB limit
             console.print(f"[red]Error: Config file '{config_path}' is too large (>1MB)![/red]")
             sys.exit(1)

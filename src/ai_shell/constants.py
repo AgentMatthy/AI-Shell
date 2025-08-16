@@ -13,9 +13,14 @@ APP_VERSION = "1.0.0"
 DEFAULT_CONFIG_FILE = "config.yaml"
 DEFAULT_CONTEXT_FILE = "context.md"
 HOME_DIR = Path.home()
+CONFIG_DIR = HOME_DIR / ".config" / "ai-shell"
 APP_DATA_DIR = HOME_DIR / ".ai-shell"
 LOGS_DIR = APP_DATA_DIR / "logs"
 CONVERSATIONS_DIR = APP_DATA_DIR / "conversations"
+
+# Full paths to config files
+CONFIG_FILE_PATH = CONFIG_DIR / DEFAULT_CONFIG_FILE
+CONTEXT_FILE_PATH = CONFIG_DIR / DEFAULT_CONTEXT_FILE
 
 # Default Configuration Values
 DEFAULT_MAX_RETRIES = 30

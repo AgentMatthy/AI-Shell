@@ -1,5 +1,9 @@
 .aider*
 config.yaml
 context.md
-src/__pycache__/
+__pycache__/
 .opencode/
+
+# Distribution / packaging
+dist/
+*.egg-info/

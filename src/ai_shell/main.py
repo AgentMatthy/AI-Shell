@@ -36,12 +36,8 @@ This script is split into several modules for better organization:
 """
 
 import sys
-import os
 
-# Add src directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-from src.app import AIShellApp
+from .app import AIShellApp
 
 
 def main() -> None:
