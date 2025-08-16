@@ -6,7 +6,7 @@ A Linux terminal agent that uses AI to execute commands and answer questions thr
 
 Check out AI Shell in action:
 
-![Demo Video](.github/aishelldemo.mp4)
+https://drive.google.com/file/d/13Mu9wOv6oXxYI2emWfNJyg2ol5-a9i4B/view?usp=drive_link
 
 ## Setup
 
