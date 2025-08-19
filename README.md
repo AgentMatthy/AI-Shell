@@ -29,7 +29,7 @@ https://drive.google.com/file/d/13Mu9wOv6oXxYI2emWfNJyg2ol5-a9i4B/view?usp=drive
 
 The `config.yaml` file contains all the configuration settings for the AI terminal assistant.
 
-It needs to be in the same directory as the `main.py` file.
+It needs to be in `~/.config/ai-shell`.
 
 These are all the available settings and their default values: (Paste this into your `config.yaml` for a quick setup)
 
@@ -170,7 +170,7 @@ incognito:
 
 The `context.md` file contains permanent additional instructions for the AI Shell Assistant.
 
-It needs to be in the same directory as the `main.py` file.
+It needs to be in `~/.config/ai-shell`.
 
 It is recommended to add information like your linux distribution, your preferred package manager, or other info that you should take into account when running commands.
 
