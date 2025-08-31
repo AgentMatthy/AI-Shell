@@ -1,6 +1,9 @@
 # AI Shell
 
-A Linux terminal agent that uses AI to execute commands and answer questions through natural language.
+A terminal agent that uses AI to execute commands and answer questions through natural language.
+
+> [!WARNING]
+> Currently only runs on LINUX!
 
 ## Demo
 
