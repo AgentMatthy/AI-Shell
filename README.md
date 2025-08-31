@@ -20,7 +20,7 @@ https://drive.google.com/file/d/13Mu9wOv6oXxYI2emWfNJyg2ol5-a9i4B/view?usp=drive
 
 2. Install the package:
    ```bash
-   pip install ai-shell-1.0.0-py3-none-any.whl
+   pip install ai_shell-1.0.0-py3-none-any.whl
    ```
 
 3. Run the agent:
