@@ -36,8 +36,18 @@ This script is split into several modules for better organization:
 """
 
 import sys
+import os
 
-from .app import AIShellApp
+# Add parent directory to path for direct execution
+if __name__ == "__main__":
+    # Get the directory containing this file
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Add the parent of ai_shell to sys.path (the src directory)
+    parent_dir = os.path.dirname(current_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+
+from ai_shell.app import AIShellApp
 
 
 def main() -> None:

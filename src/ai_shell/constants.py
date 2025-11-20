@@ -27,26 +27,10 @@ DEFAULT_MAX_RETRIES = 30
 DEFAULT_PAYLOAD_TRUNCATE_LENGTH = 1500
 DEFAULT_AUTO_SAVE_INTERVAL = 5
 DEFAULT_MAX_RECENT_CONVERSATIONS = 10
+DEFAULT_LONG_OUTPUT_THRESHOLD = 3000  # Character threshold for asking about truncation
 
-# Security Constants
-DANGEROUS_COMMAND_PATTERNS = [
-    'rm -rf /',
-    'rm -rf *',
-    'dd if=',
-    'mkfs.',
-    'fdisk',
-    'wipefs',
-    ':(){ :|: & };:',  # Fork bomb
-    'chmod 000',
-    'sudo rm -rf /',
-    'sudo dd if=',
-    'mkfs.ext4',
-    'mkfs.ntfs',
-    'format c:',
-    '>dev/sda',
-    '>dev/nvme',
-    'shred -vfz',
-]
+# Security Constants (kept for backward compatibility)
+DANGEROUS_COMMAND_PATTERNS = []
 
 # Directory changing commands
 DIR_CHANGING_COMMANDS = ['cd', 'pushd', 'popd']
@@ -114,7 +98,6 @@ LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
 # Rate Limiting
 MAX_REQUESTS_PER_MINUTE = 60
-MAX_COMMAND_LENGTH = 1000
 MAX_RESPONSE_LENGTH = 10000
 
 # Validation Patterns

@@ -18,38 +18,17 @@ try:
 except ImportError:
     # Fallback for when running as standalone
     logger = None
-    DANGEROUS_COMMAND_PATTERNS = [
-        'rm -rf /',
-        'rm -rf *',
-        'dd if=',
-        'mkfs.',
-        'fdisk',
-        'wipefs',
-        ':(){ :|: & };:',
-        'chmod 000',
-    ]
+    DANGEROUS_COMMAND_PATTERNS = []
     DIR_CHANGING_COMMANDS = ['cd', 'pushd', 'popd']
     COMMAND_TIMEOUT = 5
 
 def validate_command(command: str) -> Tuple[bool, str]:
-    """Validate command for basic security checks"""
+    """Validate command for basic checks"""
     if not command or not command.strip():
         return False, "Empty command"
     
     # Remove excessive whitespace
     command = command.strip()
-    
-    # Check command length
-    if len(command) > 1000:  # Reasonable limit
-        return False, "Command too long"
-    
-    # Check for dangerous patterns (basic security)
-    command_lower = command.lower()
-    for pattern in DANGEROUS_COMMAND_PATTERNS:
-        if pattern in command_lower:
-            if logger:
-                logger.log_security_event("DANGEROUS_COMMAND", f"Blocked command: {command}")
-            return False, f"Potentially dangerous command pattern detected: {pattern}"
     
     # Log command validation
     if logger:

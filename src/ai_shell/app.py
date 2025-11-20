@@ -620,6 +620,55 @@ class AIShellApp:
         else:
             self._execute_and_process_command(command)
     
+    def _handle_long_output(self, output: str, threshold: Optional[int] = None) -> str:
+        """Handle long command outputs by asking user if they want to truncate"""
+        # Get threshold from config if not provided
+        if threshold is None:
+            from .constants import DEFAULT_LONG_OUTPUT_THRESHOLD
+            if self.config:
+                settings = self.config.get("settings", {})
+                threshold = settings.get("long_output_threshold", DEFAULT_LONG_OUTPUT_THRESHOLD)
+            else:
+                threshold = DEFAULT_LONG_OUTPUT_THRESHOLD
+        
+        if not output or len(output) <= threshold:
+            return output
+        
+        # Ask user what to do with long output
+        self.ui.console.print(f"\n[yellow]Command output is large ({len(output)} characters)[/yellow]")
+        assert self.terminal_input is not None
+        user_choice = self.terminal_input.get_confirmation(
+            "Send to AI? [F]ull/[t]runcate", "T"
+        ).lower()
+        
+        if user_choice in ["f", "full"]:
+            return output
+        else:
+            # Truncate the output
+            return self._truncate_output(output)
+    
+    def _truncate_output(self, output: str, head_lines: int = 10, tail_lines: int = 10) -> str:
+        """Truncate command output keeping first and last lines"""
+        if not output:
+            return output
+        
+        lines = output.split('\n')
+        total_lines = len(lines)
+        
+        if total_lines <= (head_lines + tail_lines):
+            return output
+        
+        # Keep first head_lines and last tail_lines
+        head = lines[:head_lines]
+        tail = lines[-tail_lines:]
+        
+        truncated = '\n'.join(head)
+        truncated += f"\n\n... [{total_lines - head_lines - tail_lines} lines omitted] ...\n\n"
+        truncated += '\n'.join(tail)
+        truncated += f"\n\n(Command output TRUNCATED: showing {head_lines} first and {tail_lines} last lines of {total_lines} total lines)"
+        
+        return truncated
+    
     def _execute_web_search(self, query):
         """Execute web search and process results"""
         assert self.chat_manager is not None
@@ -665,6 +714,9 @@ class AIShellApp:
         
         # Execute the command
         success, result = execute_command(command)
+        
+        # Handle long command outputs
+        result = self._handle_long_output(result)
         
         # Track conversation
         self.conversation_history.append(f"Command: {command}")
