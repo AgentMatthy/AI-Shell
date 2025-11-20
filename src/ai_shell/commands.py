@@ -9,6 +9,8 @@ import signal
 import termios
 import tty
 import shlex
+import fcntl
+import struct
 from rich.console import Console
 from typing import Tuple
 
@@ -62,6 +64,17 @@ def execute_command(command: str) -> Tuple[bool, str]:
         # Create a pseudo-terminal
         try:
             master_fd, slave_fd = pty.openpty()
+            
+            # Set the PTY size to match the actual terminal
+            if sys.stdin.isatty():
+                try:
+                    # Get the current terminal size
+                    size = struct.unpack('HHHH', fcntl.ioctl(sys.stdin.fileno(), termios.TIOCGWINSZ, struct.pack('HHHH', 0, 0, 0, 0)))
+                    # Set the PTY size to match
+                    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack('HHHH', *size))
+                except (OSError, IOError) as e:
+                    # If we can't get/set size, continue anyway
+                    pass
         except OSError as e:
             console = Console()
             console.print(f"[red]Error creating pseudo-terminal: {e}[/red]")
@@ -105,6 +118,21 @@ def execute_command(command: str) -> Tuple[bool, str]:
         
         # Close the slave end in the parent process
         os.close(slave_fd)
+        
+        # Setup signal handler for terminal resize
+        def handle_sigwinch(signum, frame):
+            """Handle terminal resize events"""
+            if sys.stdin.isatty():
+                try:
+                    # Get new terminal size
+                    size = struct.unpack('HHHH', fcntl.ioctl(sys.stdin.fileno(), termios.TIOCGWINSZ, struct.pack('HHHH', 0, 0, 0, 0)))
+                    # Update PTY size
+                    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, struct.pack('HHHH', *size))
+                except (OSError, IOError):
+                    pass
+        
+        # Save old SIGWINCH handler and set new one
+        old_sigwinch = signal.signal(signal.SIGWINCH, handle_sigwinch)
         
         # Set terminal to raw mode if we're in a tty
         try:
@@ -162,6 +190,12 @@ def execute_command(command: str) -> Tuple[bool, str]:
                 pass
             
         finally:
+            # Restore SIGWINCH handler
+            try:
+                signal.signal(signal.SIGWINCH, old_sigwinch)
+            except (ValueError, OSError):
+                pass
+            
             # Restore terminal settings
             try:
                 if old_settings and sys.stdin.isatty():
