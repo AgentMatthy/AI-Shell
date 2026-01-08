@@ -62,6 +62,7 @@ Type your requests and I'll help you execute commands.
 • [green]/dr[/green] - Switch to direct mode
 • [green]/inc[/green] - Toggle incognito mode (private, local model)
 • [green]/compact[/green] - Compact command outputs in current payload (truncate long outputs)
+• [green]/resetconfig[/green] - Re-run the setup wizard to reconfigure AI Shell
 • [green]/p[/green] - Show conversation payload
 • [green]/exit[/green] or [green]/quit[/green] - Exit the program
 

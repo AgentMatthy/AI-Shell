@@ -20,7 +20,7 @@ https://drive.google.com/file/d/13Mu9wOv6oXxYI2emWfNJyg2ol5-a9i4B/view?usp=drive
 
 2. Install the package:
    ```bash
-   pip install ai_shell-1.0.0-py3-none-any.whl
+   pip install ai_shell-1.1.0-py3-none-any.whl
    ```
 
 3. Run the agent:
@@ -34,7 +34,7 @@ The `config.yaml` file contains all the configuration settings for the AI termin
 
 It needs to be in `~/.config/ai-shell`.
 
-These are all the available settings and their default values: (Paste this into your `config.yaml` for a quick setup)
+These are all the available settings and their default values:
 
 ```yaml
 # AI Shell Configuration File

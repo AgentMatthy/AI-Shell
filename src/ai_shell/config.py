@@ -6,7 +6,231 @@ import yaml
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 from rich.console import Console
-from .constants import CONFIG_FILE_PATH
+from rich.prompt import Prompt, Confirm
+from rich.panel import Panel
+from .constants import CONFIG_FILE_PATH, CONTEXT_FILE_PATH
+
+
+def run_setup_wizard(console: Console) -> Dict[str, Any]:
+    """Run the interactive setup wizard for first-time configuration"""
+    console.print(Panel(
+        "[bold cyan]Welcome to AI Shell Setup Wizard[/bold cyan]\n\n"
+        "This wizard will help you configure your AI Shell installation.",
+        border_style="cyan"
+    ))
+    console.print()
+    
+    # Step 1: Choose preset
+    console.print("[bold yellow]Step 1: Choose Configuration Preset[/bold yellow]")
+    console.print("  [cyan]openrouter[/cyan] - Use OpenRouter.ai (recommended, access to many models)")
+    console.print("  [cyan]custom[/cyan]     - Use a custom OpenAI-compatible API endpoint")
+    console.print()
+    
+    preset = Prompt.ask(
+        "Select preset",
+        choices=["openrouter", "custom"],
+        default="openrouter"
+    )
+    
+    # Step 2: Get API configuration based on preset
+    console.print()
+    console.print("[bold yellow]Step 2: API Configuration[/bold yellow]")
+    
+    if preset == "openrouter":
+        api_url = "https://openrouter.ai/api/v1"
+        console.print(f"[dim]Using OpenRouter API: {api_url}[/dim]")
+        api_key = Prompt.ask("Enter your OpenRouter API key", password=True)
+        
+        # Default models for OpenRouter
+        models_config = {
+            "response_model": "gemini-pro",
+            "available": {
+                "gemini-pro": {
+                    "name": "google/gemini-3-pro-preview",
+                    "alias": "gemini-pro",
+                    "display_name": "Gemini 3 Pro"
+                },
+                "claude-sonnet": {
+                    "name": "anthropic/claude-sonnet-4.5",
+                    "alias": "claude-sonnet",
+                    "display_name": "Claude Sonnet 4.5"
+                },
+                "claude-haiku": {
+                    "name": "anthropic/claude-haiku-4.5",
+                    "alias": "claude-haiku",
+                    "display_name": "Claude Haiku 4.5"
+                },
+                "grok-fast": {
+                    "name": "x-ai/grok-4.1-fast",
+                    "alias": "grok-fast",
+                    "display_name": "Grok 4.1 Fast"
+                },
+                "glm": {
+                    "name": "z-ai/glm-4.6",
+                    "alias": "glm",
+                    "display_name": "GLM 4.6"
+                },
+                "gpt": {
+                    "name": "openai/gpt-5.1",
+                    "alias": "gpt",
+                    "display_name": "GPT 5.1"
+                }
+            }
+        }
+    else:
+        # Custom API configuration
+        api_url = Prompt.ask("Enter API URL (OpenAI-compatible endpoint)")
+        api_key = Prompt.ask("Enter API key", password=True)
+        
+        console.print()
+        console.print("[bold yellow]Step 2b: Main Model Configuration[/bold yellow]")
+        model_id = Prompt.ask("Enter model ID (e.g., gpt-4, claude-3-opus)")
+        model_display_name = Prompt.ask("Enter display name for the model", default=model_id)
+        
+        models_config = {
+            "response_model": "main",
+            "available": {
+                "main": {
+                    "name": model_id,
+                    "alias": "main",
+                    "display_name": model_display_name
+                }
+            }
+        }
+    
+    # Step 3: Tavily API key (optional)
+    console.print()
+    console.print("[bold yellow]Step 3: Web Search Configuration (Optional)[/bold yellow]")
+    console.print("[dim]Tavily provides web search capabilities for the AI assistant.[/dim]")
+    console.print("[dim]Get your API key from https://tavily.com/[/dim]")
+    console.print()
+    
+    tavily_key = Prompt.ask("Enter Tavily API key (leave empty to disable)", default="", password=True)
+    
+    # Step 4: Context information
+    console.print()
+    console.print("[bold yellow]Step 4: System Context[/bold yellow]")
+    console.print("[dim]Provide information to help the AI understand your system.[/dim]")
+    console.print("[dim]Examples: OS version, preferred package manager, shell, common tools, etc.[/dim]")
+    console.print()
+    
+    context_info = Prompt.ask(
+        "Enter system context (or press Enter for a simple prompt)",
+        default=""
+    )
+    
+    if not context_info:
+        # Provide a more guided approach
+        console.print()
+        console.print("[dim]Let's gather some basic info:[/dim]")
+        os_info = Prompt.ask("Operating System", default="Linux")
+        package_manager = Prompt.ask("Preferred package manager", default="apt")
+        shell = Prompt.ask("Shell", default="bash")
+        extra_info = Prompt.ask("Any other relevant info (optional)", default="")
+        
+        context_info = f"""# System Context
+
+## Operating System
+{os_info}
+
+## Package Manager
+{package_manager}
+
+## Shell
+{shell}
+"""
+        if extra_info:
+            context_info += f"""
+## Additional Information
+{extra_info}
+"""
+    else:
+        context_info = f"""# System Context
+
+{context_info}
+"""
+    
+    # Build the configuration dictionary
+    config = {
+        "api": {
+            "url": api_url,
+            "api_key": api_key
+        },
+        "tavily": {
+            "api_key": tavily_key if tavily_key else "",
+            "max_results": 3,
+            "search_depth": "advanced",
+            "include_answer": True,
+            "include_raw_content": False,
+            "include_domains": [],
+            "exclude_domains": []
+        },
+        "models": models_config,
+        "settings": {
+            "max_retries": 30,
+            "payload_truncate_length": 1500,
+            "default_mode": "ai",
+            "show_welcome_message": False
+        },
+        "conversations": {
+            "auto_save_interval": 1,
+            "max_recent": 10,
+            "resume_on_startup": True,
+            "storage_path": "~/.ai-shell/conversations"
+        },
+        "incognito": {
+            "enabled": True,
+            "api": {
+                "url": "http://localhost:11434/v1",
+                "api_key": "ollama"
+            },
+            "model": {
+                "name": "artifish/llama3.2-uncensored",
+                "display_name": "Llama 3.2 Uncensored"
+            }
+        }
+    }
+    
+    # Write the configuration file
+    config_path = CONFIG_FILE_PATH
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    
+    console.print(f"\n[green]✓ Configuration saved to {config_path}[/green]")
+    
+    # Write the context file
+    context_path = CONTEXT_FILE_PATH
+    with open(context_path, 'w') as f:
+        f.write(context_info)
+    
+    console.print(f"[green]✓ Context saved to {context_path}[/green]")
+    
+    console.print()
+    console.print(Panel(
+        "[bold green]Setup Complete![/bold green]\n\n"
+        "You can now use AI Shell. To reconfigure, run [cyan]/resetconfig[/cyan]",
+        border_style="green"
+    ))
+    console.print()
+    
+    return config
+
+
+def reset_config() -> Optional[Dict[str, Any]]:
+    """Reset configuration by running the setup wizard again"""
+    console = Console()
+    
+    # Check if config exists and confirm reset
+    if CONFIG_FILE_PATH.exists() or CONTEXT_FILE_PATH.exists():
+        if not Confirm.ask("[yellow]This will overwrite your existing configuration. Continue?[/yellow]"):
+            console.print("[dim]Configuration reset cancelled.[/dim]")
+            return None
+    
+    # Run the setup wizard
+    return run_setup_wizard(console)
+
 
 def load_config(config_path: Path = CONFIG_FILE_PATH) -> Optional[Dict[str, Any]]:
     """Load and validate configuration from YAML file"""
@@ -15,10 +239,12 @@ def load_config(config_path: Path = CONFIG_FILE_PATH) -> Optional[Dict[str, Any]
     # Ensure the config directory exists
     config_path.parent.mkdir(parents=True, exist_ok=True)
     
-    if not config_path.exists():
-        console.print(f"[red]Error: Config file '{config_path}' not found![/red]")
-        console.print(f"[yellow]Please create a config.yaml file in ~/.config/ai-shell/ with your API settings.[/yellow]")
-        sys.exit(1)
+    # Check if both config and context files exist
+    context_path = CONTEXT_FILE_PATH
+    if not config_path.exists() or not context_path.exists():
+        console.print("[yellow]Configuration not found. Starting setup wizard...[/yellow]")
+        console.print()
+        return run_setup_wizard(console)
     
     # Check if file is readable
     if not config_path.is_file() or not os.access(config_path, os.R_OK):

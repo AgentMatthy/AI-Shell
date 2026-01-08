@@ -5,7 +5,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from typing import Optional, List, Dict, Any
 
-from .config import load_config
+from .config import load_config, reset_config
 from .models import ModelManager
 from .chat import ChatManager
 from .ui import UIManager
@@ -197,6 +197,9 @@ class AIShellApp:
         elif user_input.lower() == "/compact":
             self._compact_payload()
             return "continue"
+        elif user_input.lower() == "/resetconfig":
+            self._handle_reset_config()
+            return "continue"
         
         # Handle direct mode commands
         if not self.ai_mode:
@@ -366,6 +369,27 @@ class AIShellApp:
                 self.conversation_manager.update_payload(self.chat_manager.payload)
         else:
             self.ui.console.print("[yellow]No command output messages found to compact[/yellow]")
+    
+    def _handle_reset_config(self):
+        """Handle the /resetconfig command to re-run setup wizard"""
+        new_config = reset_config()
+        if new_config:
+            # Reload the configuration
+            self.config = new_config
+            
+            # Re-initialize managers with new config
+            self.model_manager = ModelManager(self.config)
+            self.conversation_manager = ConversationManager(self.config, self.ui)
+            self.web_search_manager = WebSearchManager(self.config)
+            self.chat_manager = ChatManager(self.config, self.model_manager, self.conversation_manager, self.web_search_manager)
+            self.terminal_input = TerminalInput(self.config)
+            
+            # Reload settings
+            settings = self.config.get("settings", {})
+            self.max_retries = settings.get("max_retries", 10)
+            self.ai_mode = settings.get("default_mode", "ai").lower() == "ai"
+            
+            self.ui.console.print("[green]Configuration reloaded successfully![/green]")
     
     def _truncate_system_message_outputs(self, content: str, max_length: int = 500) -> str:
         """Truncate command outputs within system messages"""

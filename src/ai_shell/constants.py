@@ -69,7 +69,7 @@ SYSTEM_COMMANDS = [
     '/ai', '/dr', '/inc',
     '/save', '/load', '/conversations', '/cv',
     '/recent', '/r', '/archive', '/delete',
-    '/status', '/p', '/payload'
+    '/status', '/p', '/payload', '/compact', '/resetconfig'
 ]
 
 # Default Incognito Configuration
