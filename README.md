@@ -13,14 +13,22 @@ https://drive.google.com/file/d/13Mu9wOv6oXxYI2emWfNJyg2ol5-a9i4B/view?usp=drive
 
 ## Setup
 
-(You will need Python 3 and pip installed)
+(You will need Python 3 and pip/pipx installed)
+
+### Automatic installation (works on most Linux distros):
+
+```bash
+curl -sSL https://raw.githubusercontent.com/AgentMatthy/AI-Shell/main/install.sh | bash
+```
+
+### Manual installation:
 
 1. Download the binary from the [releases page](https://github.com/AgentMatthy/AI-Shell/releases)
    (either the .whl or .tar.gz file)
 
 2. Install the package:
    ```bash
-   pip install ai_shell-1.1.0-py3-none-any.whl
+   pipx install ai_shell-1.1.0-py3-none-any.whl
    ```
 
 3. Run the agent:
@@ -28,7 +36,7 @@ https://drive.google.com/file/d/13Mu9wOv6oXxYI2emWfNJyg2ol5-a9i4B/view?usp=drive
    ai-shell
    ```
 
-### Configuration
+## Configuration
 
 The `config.yaml` file contains all the configuration settings for the AI terminal assistant.
 
