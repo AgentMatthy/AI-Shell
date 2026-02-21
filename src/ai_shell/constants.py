@@ -108,3 +108,45 @@ MAX_RESPONSE_LENGTH = 10000
 # Validation Patterns
 SAFE_FILENAME_PATTERN = r'^[a-zA-Z0-9._-]+$'
 API_KEY_PATTERN = r'^[a-zA-Z0-9\-_]{10,}$'
+
+# Default safe commands — read-only commands that can be auto-executed without confirmation.
+# These commands cannot modify files, system state, or cause side effects regardless of arguments.
+# Commands like sed, awk, find are excluded because they CAN be destructive with certain flags.
+# Users can override this list in config.yaml under settings.safe_commands
+DEFAULT_SAFE_COMMANDS = [
+    # File/directory listing and info
+    'ls', 'dir', 'tree', 'file', 'stat', 'readlink',
+    # File content reading (truly read-only)
+    'cat', 'head', 'tail', 'less', 'more', 'bat', 'batcat',
+    # Text searching (read-only)
+    'grep', 'egrep', 'fgrep', 'rg', 'ag', 'ack',
+    # Text processing (read-only — cannot modify files)
+    'wc', 'sort', 'uniq', 'cut', 'tr', 'rev', 'tac', 'fold', 'column',
+    'nl', 'expand', 'unexpand', 'fmt', 'paste', 'join',
+    # Comparison
+    'diff', 'comm', 'cmp',
+    # Checksums
+    'md5sum', 'sha256sum', 'sha1sum', 'sha512sum', 'cksum', 'b2sum',
+    # Binary inspection
+    'xxd', 'od', 'hexdump', 'strings',
+    # Command/path lookup
+    'which', 'whereis', 'whatis', 'type', 'command',
+    # System info
+    'uname', 'hostname', 'uptime', 'date', 'cal',
+    'whoami', 'id', 'groups', 'who', 'w', 'last',
+    'df', 'du', 'free', 'ps', 'pgrep', 'pidof',
+    'lsblk', 'lscpu', 'lsmem', 'lsusb', 'lspci', 'lsmod', 'lsof',
+    'ip', 'ifconfig', 'ss', 'netstat', 'route',
+    'env', 'printenv',
+    'nproc', 'getconf', 'arch',
+    # Path/directory utilities
+    'pwd', 'realpath', 'dirname', 'basename',
+    # Output (safe by itself — redirections are checked separately)
+    'echo', 'printf',
+    # Version/help
+    'man', 'info', 'help',
+    # Conditionals (read-only)
+    'true', 'false', 'test', '[',
+    # JSON/YAML processing (read-only)
+    'jq', 'yq',
+]

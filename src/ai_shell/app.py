@@ -10,6 +10,8 @@ from .models import ModelManager
 from .chat import ChatManager
 from .ui import UIManager
 from .commands import execute_command
+from .command_safety import is_safe_command
+from .constants import DEFAULT_SAFE_COMMANDS
 from .conversation_manager import ConversationManager
 from .terminal_input import TerminalInput
 from .web_search import WebSearchManager
@@ -40,6 +42,7 @@ class AIShellApp:
         self.rejudge = False
         self.rejudge_count = 0
         self.auto_approve_commands = False
+        self.safe_commands: set = set(DEFAULT_SAFE_COMMANDS)
     
     def initialize(self):
         """Initialize all components"""
@@ -61,6 +64,16 @@ class AIShellApp:
             settings = self.config.get("settings", {})
             self.max_retries = settings.get("max_retries", 10)
             self.ai_mode = settings.get("default_mode", "ai").lower() == "ai"
+            
+            # Load safe commands for auto-approval
+            if "safe_commands" in settings:
+                custom_list = settings["safe_commands"]
+                if isinstance(custom_list, list):
+                    self.safe_commands = set(custom_list)
+                else:
+                    self.safe_commands = set(DEFAULT_SAFE_COMMANDS)
+            else:
+                self.safe_commands = set(DEFAULT_SAFE_COMMANDS)
             
             # Check for conversation resume
             resume_session = self.conversation_manager.check_for_resume()
@@ -826,15 +839,26 @@ class AIShellApp:
                     self.rejudge = True
     
     def _execute_command_with_confirmation(self, command):
-        """Execute command after user confirmation"""
+        """Execute command after user confirmation, auto-approving safe read-only commands"""
         assert self.chat_manager is not None
         
-        # Skip confirmation if auto-approve is enabled
+        # Skip confirmation if auto-approve is enabled (user pressed 'a' earlier)
         if self.auto_approve_commands:
             self._execute_and_process_command(command)
             return
         
-        # Ask for confirmation
+        # Auto-approve safe (read-only) commands without asking
+        if self.safe_commands and is_safe_command(command, self.safe_commands):
+            cmd_display = command if len(command) <= 80 else command[:77] + "..."
+            self.ui.console.print(Panel(
+                f"[bold white]Auto-executing safe command:[/bold white] [cyan]`{cmd_display}`[/cyan]",
+                title="[green]Safe Command[/green]",
+                border_style="green"
+            ))
+            self._execute_and_process_command(command)
+            return
+        
+        # Ask for confirmation for non-safe commands
         panel_content = f"[bold white]Execute command:[/bold white] [cyan]`{command}`[/cyan]"
         self.ui.console.print(Panel(panel_content, title="[yellow]Command[/yellow]", border_style="yellow"))
         
