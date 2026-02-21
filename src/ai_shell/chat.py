@@ -85,10 +85,12 @@ class ChatManager:
             web_search_info = """
 
 WEB SEARCH CAPABILITY:
-You have access to web search functionality. When you need current information, documentation, or answers that are not available through local commands, use web search blocks like this:
+You have access to a web search tool. This is NOT a traditional keyword-based search engine like Google — it is an AI-powered search model that understands natural language. You should ask it full, detailed questions rather than short keyword queries. Be as specific as needed — the search model will understand context and nuance.
+
+Use web search blocks like this:
 
 ```websearch
-query terms here
+your full question here
 ```
 
 Use web search when you need to:
@@ -98,11 +100,19 @@ Use web search when you need to:
 - Find solutions to specific error messages or problems
 - Research best practices or current recommendations
 
-Example:
-"Let me search for the latest installation instructions for Docker:
+Since the search tool is an AI model, write your queries as complete questions with full context. For example:
+
+GOOD: "What is the recommended way to install Docker Engine on Ubuntu 24.04, and what are the prerequisites?"
+BAD: "Docker installation Ubuntu 2024 latest"
+
+GOOD: "How do I fix the Python error 'ModuleNotFoundError: No module named xyz' when using a virtual environment?"
+BAD: "python modulenotfounderror xyz"
+
+Example usage:
+"Let me search for the recommended approach:
 
 ```websearch
-Docker installation Ubuntu 2024 latest
+What is the recommended way to install Docker Engine on Ubuntu 24.04, including repository setup and prerequisites?
 ```"
 
 IMPORTANT: Like commands, use ONLY ONE web search block per response."""
