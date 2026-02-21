@@ -7,11 +7,12 @@ from rich.console import Console
 from openai import OpenAI
 
 class ChatManager:
-    def __init__(self, config, model_manager, conversation_manager=None, web_search_manager=None):
+    def __init__(self, config, model_manager, conversation_manager=None, web_search_manager=None, context_manager=None):
         self.config = config
         self.model_manager = model_manager
         self.conversation_manager = conversation_manager
         self.web_search_manager = web_search_manager
+        self.context_manager = context_manager
         self.console = Console()
         self.payload = [{"role": "system", "content": self._get_system_prompt()}]
         self.incognito_mode = False
@@ -118,11 +119,57 @@ What is the recommended way to install Docker Engine on Ubuntu 24.04, including 
 IMPORTANT: Like commands, use ONLY ONE web search block per response."""
 
 # ------------------------- #
+
+        context_management_info = """
+
+CONTEXT MANAGEMENT:
+You MUST actively manage your conversation context. After every command execution or search result, you should
+immediately evaluate whether the output needs to be distilled or pruned BEFORE continuing with the next step.
+Do NOT let outputs accumulate — manage them as soon as they have served their purpose.
+
+WHEN TO MANAGE (you must do this, it is not optional):
+- After a command runs successfully and you have extracted what you need from its output → DISTILL or PRUNE it
+- Package installation outputs, build logs, download progress → DISTILL to just the outcome (e.g. "neovim installed successfully")  
+- File listings, config dumps you've already read and acted on → PRUNE them
+- Outputs that are duplicated by newer outputs (e.g. you read a file, edited it, then read it again) → PRUNE the older one
+- Task continuation messages, error handling messages → PRUNE once resolved
+- Large outputs where you only needed a small piece of information → DISTILL to just that information
+- When you see the <prunable-messages> list has entries, evaluate each one and manage any that are stale
+
+WHEN NOT TO MANAGE:
+- You still need the output for upcoming work (e.g. you're about to edit a file you just read)
+- The output contains information the user might ask about later in this same task
+
+Available tools:
+
+1. context_distill - Condense a message to a short summary. Use for outputs where the key result matters but details don't.
+```context_distill
+id: <message_id>
+summary: <concise summary — e.g. "installed nginx 1.24.0 successfully" or "file contains 3 server blocks on ports 80, 443, 8080">
+```
+
+2. context_prune - Remove messages entirely. Use for outputs that are completely stale or superseded.
+```context_prune
+ids: <id1>, <id2>, ...
+```
+
+3. context_untruncate - Reveal full content of an auto-truncated message if you need details hidden in the middle.
+```context_untruncate
+id: <message_id>
+```
+
+Rules:
+- The <prunable-messages> list below shows manageable messages with IDs and token sizes
+- Messages marked [truncated] have hidden content — use context_untruncate if needed
+- Messages marked [already distilled] are already condensed — prune them if no longer needed
+- Context management uses the same one-block-per-response rule as commands and searches
+- After managing context, you will automatically continue with your task
+- IMPORTANT: Your DEFAULT behavior after a command completes should be to manage its output, then continue. Do not skip this step."""
         
         additional_instructions = self._load_additional_instructions()
         
         return f"""
-You are a Linux terminal assistant Agent. You can provide explanations and execute commands naturally.{web_search_info}
+You are a Linux terminal assistant Agent. You can provide explanations and execute commands naturally.{web_search_info}{context_management_info}
 
 COMMAND FORMAT: When you need to run a command, use command blocks like this:
 
@@ -154,13 +201,14 @@ Examples:
 RULES:
 1. Use ```command blocks ONLY for commands you want executed
 2. Use ```websearch blocks ONLY for web searches when you need current information or precise instructions (like documentation)
-3. You can mix explanations and commands/searches naturally in the same response
-4. Each command or search block should contain exactly one command or query
-5. CRITICAL: Use ONLY ONE command OR search block per response - NEVER multiple
-6. Always explain what the command or search will do
-7. After each command/search, wait to see the result before proceeding
-8. Execute commands/searches one at a time and analyze results before continuing
-9. ALWAYS end your response with the appropriate tag: [QUESTION], [COMPLETE], or no tag
+3. Use ```context_distill, ```context_prune, or ```context_untruncate blocks for managing conversation context
+4. You can mix explanations and commands/searches naturally in the same response
+5. Each command or search block should contain exactly one command or query
+6. CRITICAL: Use ONLY ONE command, search, OR context management block per response - NEVER multiple
+7. Always explain what the command or search will do
+8. After each command/search, wait to see the result before proceeding
+9. Execute commands/searches one at a time and analyze results before continuing
+10. ALWAYS end your response with the appropriate tag: [QUESTION], [COMPLETE], or no tag
 
 COMMAND EXECUTION STRATEGY:
 - Execute EXACTLY ONE command OR search per response
@@ -273,11 +321,21 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
             model_name = self.get_current_model_name()
             client = self.get_current_client()
             
+            # Prepare clean messages for the API (strip metadata fields)
+            if self.context_manager:
+                api_messages = self.context_manager.prepare_messages_for_api(self.payload)
+                # Inject prunable messages list into system prompt copy
+                prunable_list = self.context_manager.get_prunable_list(self.payload)
+                if prunable_list and api_messages and api_messages[0]["role"] == "system":
+                    api_messages[0]["content"] += f"\n\n{prunable_list}"
+            else:
+                api_messages = self.payload
+            
             # Make streaming API request - shows "Processing..." during connection establishment
             with self.console.status("[bold cyan]Processing...[/bold cyan]", spinner_style="cyan"):
                 response = client.chat.completions.create(
                     model=model_name, 
-                    messages=self.payload, 
+                    messages=api_messages, 
                     stream=True
                 )
             

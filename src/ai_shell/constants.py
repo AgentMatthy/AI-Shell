@@ -27,7 +27,12 @@ DEFAULT_MAX_RETRIES = 30
 DEFAULT_PAYLOAD_TRUNCATE_LENGTH = 1500
 DEFAULT_AUTO_SAVE_INTERVAL = 5
 DEFAULT_MAX_RECENT_CONVERSATIONS = 10
-DEFAULT_LONG_OUTPUT_THRESHOLD = 3000  # Character threshold for asking about truncation
+DEFAULT_LONG_OUTPUT_THRESHOLD = 3000  # Character threshold for asking about truncation (legacy)
+
+# Auto-truncation settings (context management)
+DEFAULT_AUTO_TRUNCATE_THRESHOLD = 10000  # Character threshold for automatic truncation
+DEFAULT_TRUNCATE_HEAD_LINES = 50         # Lines to keep from the start
+DEFAULT_TRUNCATE_TAIL_LINES = 50         # Lines to keep from the end
 
 # Security Constants (kept for backward compatibility)
 DANGEROUS_COMMAND_PATTERNS = []
