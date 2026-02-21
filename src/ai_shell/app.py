@@ -700,7 +700,7 @@ class AIShellApp:
         
         # Check if web search is available
         if not self.web_search_manager.is_available():
-            self.ui.console.print("[red]Web search is not available. Please configure Tavily API key.[/red]")
+            self.ui.console.print("[red]Web search is not available. Please configure a search model in your config (e.g. perplexity/sonar-pro).[/red]")
             return
         
         # Display search query
@@ -722,13 +722,13 @@ class AIShellApp:
                 self.conversation_history = self.conversation_history[-10:]
             
             # Add search results to conversation context
-            search_context = f"SYSTEM MESSAGE: Web search executed for: {query}\n\nSearch Results:\n{formatted_results}\n\nPlease use this information to continue with the original request: {self.original_request}"
+            search_context = f"SYSTEM MESSAGE: Web search executed for: {query}\n\nSearch Results:\n{formatted_results}"
             self.chat_manager.payload.append({"role": "user", "content": search_context})
             self.rejudge = True
         else:
             # Search failed
             self.ui.console.print("[red]Web search failed. Please try a different query or approach.[/red]")
-            search_failure_context = f"SYSTEM MESSAGE: Web search failed for query: {query}\n\nPlease try a different approach or rephrase the search query to complete the original request: {self.original_request}"
+            search_failure_context = f"SYSTEM MESSAGE: Web search failed for query: {query}\n\nPlease try a different approach or rephrase the search query."
             self.chat_manager.payload.append({"role": "user", "content": search_failure_context})
             self.rejudge = True
 

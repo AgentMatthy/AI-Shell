@@ -98,14 +98,14 @@ def run_setup_wizard(console: Console) -> Dict[str, Any]:
             }
         }
     
-    # Step 3: Tavily API key (optional)
+    # Step 3: Web Search Model (optional)
     console.print()
     console.print("[bold yellow]Step 3: Web Search Configuration (Optional)[/bold yellow]")
-    console.print("[dim]Tavily provides web search capabilities for the AI assistant.[/dim]")
-    console.print("[dim]Get your API key from https://tavily.com/[/dim]")
+    console.print("[dim]Web search uses a search-capable AI model (e.g. perplexity/sonar-pro) to answer queries.[/dim]")
+    console.print("[dim]This uses your existing API endpoint - no extra API key needed.[/dim]")
     console.print()
     
-    tavily_key = Prompt.ask("Enter Tavily API key (leave empty to disable)", default="", password=True)
+    search_model = Prompt.ask("Enter search model ID (e.g. perplexity/sonar-pro, leave empty to disable)", default="perplexity/sonar-pro")
     
     # Step 4: Context information
     console.print()
@@ -156,14 +156,12 @@ def run_setup_wizard(console: Console) -> Dict[str, Any]:
             "url": api_url,
             "api_key": api_key
         },
-        "tavily": {
-            "api_key": tavily_key if tavily_key else "",
-            "max_results": 3,
-            "search_depth": "advanced",
-            "include_answer": True,
-            "include_raw_content": False,
-            "include_domains": [],
-            "exclude_domains": []
+        "web_search": {
+            "enabled": bool(search_model),
+            "model": search_model,
+            "api_url": "",
+            "api_key": "",
+            "system_prompt": ""
         },
         "models": models_config,
         "settings": {
