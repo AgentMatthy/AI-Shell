@@ -127,8 +127,14 @@ You MUST actively manage your conversation context. After every command executio
 immediately evaluate whether the output needs to be distilled or pruned BEFORE continuing with the next step.
 Do NOT let outputs accumulate — manage them as soon as they have served their purpose.
 
+CRITICAL RULE — TIMING:
+- NEVER prune or distill information you are about to use in your VERY NEXT step.
+- First USE the information (run the command, write the file, answer the question), THEN manage the context AFTERWARD.
+- Example: if a web search tells you the package name is "helix", first run "sudo pacman -S helix", THEN distill the search result.
+- Think: "Do I still need this for my next action?" If YES → do your action first, manage context later.
+
 WHEN TO MANAGE (you must do this, it is not optional):
-- After a command runs successfully and you have extracted what you need from its output → DISTILL or PRUNE it
+- AFTER you have already used the information and completed the step that needed it → DISTILL or PRUNE
 - Package installation outputs, build logs, download progress → DISTILL to just the outcome (e.g. "neovim installed successfully")  
 - File listings, config dumps you've already read and acted on → PRUNE them
 - Outputs that are duplicated by newer outputs (e.g. you read a file, edited it, then read it again) → PRUNE the older one
@@ -137,7 +143,8 @@ WHEN TO MANAGE (you must do this, it is not optional):
 - When you see the <prunable-messages> list has entries, evaluate each one and manage any that are stale
 
 WHEN NOT TO MANAGE:
-- You still need the output for upcoming work (e.g. you're about to edit a file you just read)
+- The output contains information you need for your NEXT step (e.g. search results you haven't acted on yet, file contents you're about to edit)
+- You just received the output and haven't used it yet — USE IT FIRST, then manage
 - The output contains information the user might ask about later in this same task
 
 Available tools:
