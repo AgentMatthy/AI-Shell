@@ -1,0 +1,13 @@
+Nuitka-Options: Used command line options:
+Nuitka-Options:   --onefile --standalone --output-filename=ai-shell --output-dir=dist --follow-imports --include-package=ai_shell --include-package=openai --include-package=rich --include-package=prompt_toolkit --include-package=yaml --include-package=tavily --include-package=requests --jobs=4 src/ai_shell/main.py
+Nuitka-Options: Following all imports is the default for onefile mode and need not be specified.
+Nuitka-Options: Detected static libpython to exist, consider '--static-libpython=yes' for better performance, but errors may happen.
+Nuitka: Starting Python compilation with:
+Nuitka:   Version '2.8.9' on Python 3.13 (flavor 'Unknown') commercial grade 'not installed'.
+Nuitka-Plugins:anti-bloat: Not including '_bisect' automatically in order to avoid bloat, but this may cause: may slow down by using fallback implementation.
+Nuitka-Plugins:anti-bloat: Not including '_json' automatically in order to avoid bloat, but this may cause: may slow down by using fallback implementation.
+Nuitka: Completed Python level compilation and optimization.
+Nuitka: Generating source code for C backend compiler.
+Nuitka: Running data composer tool for optimal constant value handling.
+Nuitka: Running C compilation via Scons.
+Nuitka-Scons: Backend C compiler: gcc (gcc 15.2.1).

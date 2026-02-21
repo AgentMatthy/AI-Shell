@@ -1,0 +1,29 @@
+FROM ubuntu:20.04
+
+# Avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    python3 \
+    python3-pip \
+    git \
+    binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install specific older version of PyOxidizer that's more stable
+RUN cargo install pyoxidizer --version 0.22.0
+
+# Set working directory
+WORKDIR /build
+
+# Default command
+CMD ["bash"]
