@@ -589,12 +589,29 @@ class AIShellApp:
 
     # ─── Context Management Handlers ───────────────────────────────────
 
+    def _display_context_management_message(self, response):
+        """Display the AI's message text from a context management response (stripping tool blocks)"""
+        # Strip all context management blocks from the response
+        display_text = re.sub(r"```context_distill\s*.*?\s*```", "", response, flags=re.DOTALL)
+        display_text = re.sub(r"```context_prune\s*.*?\s*```", "", display_text, flags=re.DOTALL)
+        display_text = re.sub(r"```context_untruncate\s*.*?\s*```", "", display_text, flags=re.DOTALL)
+        display_text = self.chat_manager.strip_response_tags_for_display(display_text).strip()
+        
+        if display_text:
+            md = Markdown(display_text)
+            self.ui.console.print()
+            self.ui.console.print(Panel(md, title="Context Management", border_style="dim"))
+            self.ui.console.print()
+
     def _handle_context_distill(self, response, distill_blocks):
         """Handle response containing a context_distill block"""
         assert self.chat_manager is not None
         assert self.context_manager is not None
         
         self.rejudge_count = 0
+        
+        # Display the AI's accompanying message
+        self._display_context_management_message(response)
         
         # Parse the distill block
         block_content = distill_blocks[0].strip()
@@ -630,6 +647,9 @@ class AIShellApp:
         
         self.rejudge_count = 0
         
+        # Display the AI's accompanying message
+        self._display_context_management_message(response)
+        
         # Parse the prune block
         block_content = prune_blocks[0].strip()
         msg_ids = self._parse_context_prune(block_content)
@@ -662,6 +682,9 @@ class AIShellApp:
         assert self.context_manager is not None
         
         self.rejudge_count = 0
+        
+        # Display the AI's accompanying message
+        self._display_context_management_message(response)
         
         # Parse the untruncate block
         block_content = untruncate_blocks[0].strip()

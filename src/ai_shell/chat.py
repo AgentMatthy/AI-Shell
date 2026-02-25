@@ -133,10 +133,17 @@ CRITICAL RULE — TIMING:
 - Example: if a web search tells you the package name is "helix", first run "sudo pacman -S helix", THEN distill the search result.
 - Think: "Do I still need this for my next action?" If YES → do your action first, manage context later.
 
+CRITICAL RULE — ALWAYS PREFER DISTILL OVER PRUNE:
+- ALWAYS use context_distill instead of context_prune unless the message is completely irrelevant noise (e.g. a failed command you're retrying, a duplicate output, or a system confirmation message).
+- Distilling preserves important information in a compact form. Pruning destroys it permanently.
+- When distilling, include ALL important data in your summary: key results, file paths, version numbers, error messages, configuration values, package names — anything that could be useful later.
+- Write thorough, information-dense summaries. A good distillation makes re-reading the original unnecessary.
+- Only prune messages that contain ZERO useful information (e.g. "Context management applied" confirmations, completely superseded outputs, or empty/failed results you've already handled).
+
 WHEN TO MANAGE (you must do this, it is not optional):
-- AFTER you have already used the information and completed the step that needed it → DISTILL or PRUNE
+- AFTER you have already used the information and completed the step that needed it → DISTILL
 - Package installation outputs, build logs, download progress → DISTILL to just the outcome (e.g. "neovim installed successfully")  
-- File listings, config dumps you've already read and acted on → PRUNE them
+- File listings, config dumps you've already read and acted on → DISTILL to the key findings
 - Outputs that are duplicated by newer outputs (e.g. you read a file, edited it, then read it again) → PRUNE the older one
 - Task continuation messages, error handling messages → PRUNE once resolved
 - Large outputs where you only needed a small piece of information → DISTILL to just that information
@@ -149,13 +156,13 @@ WHEN NOT TO MANAGE:
 
 Available tools:
 
-1. context_distill - Condense a message to a short summary. Use for outputs where the key result matters but details don't.
+1. context_distill - Condense a message to a short summary. PREFERRED — use this for almost all context management. Include all important data in the summary.
 ```context_distill
 id: <message_id>
-summary: <concise summary — e.g. "installed nginx 1.24.0 successfully" or "file contains 3 server blocks on ports 80, 443, 8080">
+summary: <thorough summary with all key data — e.g. "installed nginx 1.24.0 successfully" or "file contains 3 server blocks on ports 80, 443, 8080">
 ```
 
-2. context_prune - Remove messages entirely. Use for outputs that are completely stale or superseded.
+2. context_prune - Remove messages entirely. Use ONLY for messages that are completely irrelevant noise or fully superseded duplicates.
 ```context_prune
 ids: <id1>, <id2>, ...
 ```
@@ -171,7 +178,8 @@ Rules:
 - Messages marked [already distilled] are already condensed — prune them if no longer needed
 - Context management uses the same one-block-per-response rule as commands and searches
 - After managing context, you will automatically continue with your task
-- IMPORTANT: Your DEFAULT behavior after a command completes should be to manage its output, then continue. Do not skip this step."""
+- IMPORTANT: Your DEFAULT behavior after a command completes should be to manage its output, then continue. Do not skip this step.
+- REMEMBER: Always write a brief message explaining what you're doing when managing context — it will be shown to the user."""
         
         additional_instructions = self._load_additional_instructions()
         
