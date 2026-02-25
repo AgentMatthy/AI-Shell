@@ -873,32 +873,33 @@ class AIShellApp:
         # Auto-approve safe (read-only) commands without asking
         if self.safe_commands and is_safe_command(command, self.safe_commands):
             cmd_display = command if len(command) <= 80 else command[:77] + "..."
-            self.ui.console.print(Panel(
-                f"[bold white]Auto-executing safe command:[/bold white] [cyan]`{cmd_display}`[/cyan]",
-                title="[green]Safe Command[/green]",
-                border_style="green"
-            ))
+            panel_content = f"[bold white]Auto-executing safe command:[/bold white]\n[cyan]`{cmd_display}`[/cyan]"
+            self.ui.console.print(self.ui.ai_panel(panel_content, border_style="green", style="on grey15"))
             self._execute_and_process_command(command)
             return
         
-        # Ask for confirmation for non-safe commands
-        panel_content = f"[bold white]Execute command:[/bold white] [cyan]`{command}`[/cyan]"
-        self.ui.console.print(Panel(panel_content, title="[yellow]Command[/yellow]", border_style="yellow"))
+        # Ask for confirmation for non-safe commands — command + prompt inside one panel
+        panel_content = (
+            f"[bold white]Execute command:[/bold white]\n"
+            f"[cyan]`{command}`[/cyan]\n\n"
+            f"[dim]\\[Y/Enter] Execute  \\[n] Decline  \\[a] Approve all[/dim]"
+        )
+        self.ui.console.print(self.ui.ai_panel(panel_content, border_style="yellow", style="on grey15"))
         
         assert self.terminal_input is not None
-        user_choice = self.terminal_input.get_confirmation("Execute? [Y/n/a]", "Y").lower()
+        user_choice = self.terminal_input.get_instant_confirmation()
         
-        if user_choice in ["a", "all"]:
+        if user_choice == "a":
             self.auto_approve_commands = True
             self.ui.console.print("[green]Auto-approving all commands for this request[/green]")
             self._execute_and_process_command(command)
         elif user_choice == "n":
-            reason = self.terminal_input.get_reason_input("Reason for decline")
-            msg = {"role": "user", "content": f"SYSTEM MESSAGE: User declined to run the command: {command}\nReason: {reason}\n\nPlease provide an alternative approach to complete the original request: {self.original_request}"}
-            self.chat_manager.payload.append(msg)
+            self.ui.console.print("[yellow]Command declined.[/yellow]")
             cmd_label = command[:60] + "..." if len(command) > 60 else command
-            self.context_manager.assign_metadata(msg, label=f"User declined: {cmd_label}")
-            self.rejudge = True
+            msg = {"role": "user", "content": f"SYSTEM MESSAGE: Tool use declined by user. The user chose not to execute: `{command}`"}
+            self.chat_manager.payload.append(msg)
+            self.context_manager.assign_metadata(msg, label=f"Declined: {cmd_label}")
+            # Don't set rejudge — return to user prompt so they can guide the conversation
         else:
             self._execute_and_process_command(command)
     

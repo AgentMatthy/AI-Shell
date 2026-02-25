@@ -7,6 +7,8 @@ Provides arrow key navigation, tab completion, proper line editing, and command 
 
 import os
 import sys
+import tty
+import termios
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.history import FileHistory
@@ -297,3 +299,22 @@ class TerminalInput:
             ).strip()
         except (KeyboardInterrupt, EOFError):
             raise
+    
+    def get_instant_confirmation(self) -> str:
+        """Get instant Y/n/a confirmation via single keypress (no Enter needed).
+        Returns 'y', 'n', or 'a'."""
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+        
+        if ch in ('n', 'N'):
+            return 'n'
+        elif ch in ('a', 'A'):
+            return 'a'
+        else:
+            # Y, Enter, or any other key = accept
+            return 'y'
