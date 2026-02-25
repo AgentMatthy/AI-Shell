@@ -621,7 +621,7 @@ class AIShellApp:
             result = self.context_manager.distill(self.chat_manager.payload, msg_id, summary)
             if result:
                 distilled_id, label = result
-                self.ui.console.print(f"[dim]  ✓ Distilled #{distilled_id}: {label}[/dim]")
+                self.ui.console.print(f"[dim]  Distilled #{distilled_id}: {label}[/dim]")
                 # Inject continuation message
                 msg = {"role": "user", "content": "SYSTEM MESSAGE: Context management applied. Continue with your task."}
                 self.chat_manager.payload.append(msg)
@@ -658,7 +658,7 @@ class AIShellApp:
             pruned_info = self.context_manager.prune(self.chat_manager.payload, msg_ids)
             if pruned_info:
                 for pruned_id, label in pruned_info:
-                    self.ui.console.print(f"[dim]  ✓ Pruned #{pruned_id}: {label}[/dim]")
+                    self.ui.console.print(f"[dim]  Pruned #{pruned_id}: {label}[/dim]")
                 msg = {"role": "user", "content": "SYSTEM MESSAGE: Context management applied. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management confirmation")
@@ -694,7 +694,7 @@ class AIShellApp:
             result = self.context_manager.untruncate(self.chat_manager.payload, msg_id)
             if result:
                 untruncated_id, label = result
-                self.ui.console.print(f"[dim]  ✓ Untruncated #{untruncated_id}: {label}[/dim]")
+                self.ui.console.print(f"[dim]  Untruncated #{untruncated_id}: {label}[/dim]")
                 msg = {"role": "user", "content": "SYSTEM MESSAGE: Message untruncated - full content is now visible. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management confirmation")
