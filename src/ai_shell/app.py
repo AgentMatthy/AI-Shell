@@ -600,7 +600,7 @@ class AIShellApp:
         if display_text:
             md = Markdown(display_text)
             self.ui.console.print()
-            self.ui.console.print(Panel(md, title="Context Management", border_style="dim"))
+            self.ui.console.print(self.ui.ai_panel(md, border_style="dim"))
             self.ui.console.print()
 
     def _handle_context_distill(self, response, distill_blocks):
@@ -779,7 +779,7 @@ class AIShellApp:
         display_response = self.chat_manager.strip_response_tags_for_display(response)
         md = Markdown(display_response)
         self.ui.console.print()
-        self.ui.console.print(Panel(md, title="Response", border_style="blue"))
+        self.ui.console.print(self.ui.ai_panel(md))
         self.ui.console.print()
         
         # Execute command
@@ -802,7 +802,7 @@ class AIShellApp:
         display_response = self.chat_manager.strip_response_tags_for_display(response)
         md = Markdown(display_response)
         self.ui.console.print()
-        self.ui.console.print(Panel(md, title="Response", border_style="blue"))
+        self.ui.console.print(self.ui.ai_panel(md))
         self.ui.console.print()
         
         # Execute web search
@@ -824,7 +824,7 @@ class AIShellApp:
         display_response = self.chat_manager.strip_response_tags_for_display(response)
         md = Markdown(display_response)
         self.ui.console.print()
-        self.ui.console.print(Panel(md, title="Summary", border_style="blue"))
+        self.ui.console.print(self.ui.ai_panel(md))
         self.ui.console.print()
         
         # Check if task completion is needed

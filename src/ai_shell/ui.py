@@ -4,6 +4,20 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Prompt
+from rich.box import Box
+
+# Custom box with only a left vertical line (for AI messages)
+# Line extends through top/bottom padding rows
+AI_MSG_BOX = Box(
+    "▎   \n"
+    "▎   \n"
+    "▎   \n"
+    "▎   \n"
+    "▎   \n"
+    "▎   \n"
+    "▎   \n"
+    "▎   \n"
+)
 
 class UIManager:
     def __init__(self):
@@ -111,13 +125,18 @@ Type your requests and I'll help you execute commands.
     
     def show_ai_response(self, response, title="AI Assistant"):
         """Display AI response in a styled panel"""
-        panel = Panel(
-            response,
-            title=title,
-            title_align="left",
-            border_style="green"
-        )
+        panel = self.ai_panel(response)
         self.console.print(panel)
+    
+    def ai_panel(self, content, border_style="green", style="on grey11"):
+        """Create a styled panel for AI messages — green line on left, subtle background"""
+        return Panel(
+            content,
+            box=AI_MSG_BOX,
+            border_style=border_style,
+            style=style,
+            padding=(0, 1),
+        )
     
     def show_command_execution(self, command):
         """Display command being executed"""
@@ -202,14 +221,14 @@ Type your requests and I'll help you execute commands.
             content = message.get("content", "")
             
             if role == "user":
-                # Display user messages with a different style
+                # Display user messages as plain text
                 self.console.print(f"\n[bold green]You:[/bold green]")
                 self.console.print(f"[white]{content}[/white]")
             elif role == "assistant":
-                # Display assistant messages with markdown formatting
+                # Display assistant messages with left-line panel
                 from rich.markdown import Markdown
                 self.console.print(f"\n[bold blue]Assistant:[/bold blue]")
                 md = Markdown(content)
-                self.console.print(Panel(md, border_style="blue", padding=(0, 1)))
+                self.console.print(self.ai_panel(md))
         
         self.console.print(f"\n[dim]--- End of previous conversation ({len(display_messages)} messages) ---[/dim]\n")
