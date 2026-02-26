@@ -974,6 +974,9 @@ class AIShellApp:
         assert self.chat_manager is not None
         assert self.context_manager is not None
         
+        # Padding between execute block and command output
+        self.ui.console.print()
+
         # Execute the command
         success, result = execute_command(command)
         
