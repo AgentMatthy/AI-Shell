@@ -52,6 +52,9 @@ class AIShellApp:
             if self.config is None:
                 raise RuntimeError("Failed to load configuration")
             
+            # Reinitialize UI with config for themed console
+            self.ui = UIManager(self.config)
+            
             # Initialize managers
             self.model_manager = ModelManager(self.config)
             self.conversation_manager = ConversationManager(self.config, self.ui)
@@ -133,10 +136,10 @@ class AIShellApp:
                 self.ui.console.print("")
                 continue
             except EOFError:
-                self.ui.console.print("\n[yellow]Goodbye![/yellow]")
+                self.ui.console.print("\n[warning]Goodbye![/warning]")
                 break
             except Exception as error:
-                self.ui.console.print(f"[red]Error occurred:[/red] {str(error)}")
+                self.ui.console.print(f"[error]Error occurred:[/error] {str(error)}")
                 continue
     
     def _reset_conversation_state(self):
@@ -193,7 +196,7 @@ class AIShellApp:
             if command:
                 success, result = execute_command(command)
                 if not success and result.strip():
-                    self.ui.console.print(f"[red]Command failed[/red]")
+                    self.ui.console.print(f"[error]Command failed[/error]")
             return "continue"
         
         # Handle conversation management commands
@@ -223,7 +226,7 @@ class AIShellApp:
         if not self.ai_mode:
             success, result = execute_command(user_input)
             if not success and result.strip():
-                self.ui.console.print(f"[red]✗ Command failed[/red]")
+                self.ui.console.print(f"[error]✗ Command failed[/error]")
             return "direct_command"
         
         # AI mode - process with AI
@@ -231,13 +234,13 @@ class AIShellApp:
     
     def _show_payload(self):
         """Display current conversation payload"""
-        self.ui.console.print("\n[bold cyan]Current Conversation Payload:[/bold cyan]")
+        self.ui.console.print("\n[bold accent]Current Conversation Payload:[/bold accent]")
         for i, message in enumerate(self.chat_manager.payload):
             role_color = {
-                "system": "yellow",
-                "user": "green", 
-                "assistant": "blue"
-            }.get(message["role"], "white")
+                "system": "warning",
+                "user": "success", 
+                "assistant": "accent"
+            }.get(message["role"], "fg")
             
             # Show message ID and state if available
             msg_id = message.get("_msg_id")
@@ -257,9 +260,9 @@ class AIShellApp:
         # Show context stats
         if self.context_manager:
             total_tokens = self.context_manager.get_total_tokens(self.chat_manager.payload)
-            self.ui.console.print(f"\n[dim]Total messages: {len(self.chat_manager.payload)} | Estimated tokens: ~{total_tokens}[/dim]")
+            self.ui.console.print(f"\n[muted]Total messages: {len(self.chat_manager.payload)} | Estimated tokens: ~{total_tokens}[/muted]")
         else:
-            self.ui.console.print(f"\n[dim]Total messages: {len(self.chat_manager.payload)}[/dim]")
+            self.ui.console.print(f"\n[muted]Total messages: {len(self.chat_manager.payload)}[/muted]")
     
     def _handle_conversation_commands(self, user_input):
         """Handle conversation management commands"""
@@ -293,7 +296,7 @@ class AIShellApp:
                         self.chat_manager.payload = new_payload
                         self.context_manager.restore_ids_from_saved(new_payload)
             except ValueError:
-                self.ui.console.print("[red]Invalid number format[/red]")
+                self.ui.console.print("[error]Invalid number format[/error]")
             return True
         elif user_input.lower().startswith(("/conversations", "/conversation", "/cv")):
             # Check for -r flag for removal
@@ -340,7 +343,7 @@ class AIShellApp:
                 })
             
             if not models:
-                self.ui.console.print("[yellow]No models configured.[/yellow]")
+                self.ui.console.print("[warning]No models configured.[/warning]")
                 return True
             
             selected = self.terminal_input.interactive_model_select(
@@ -349,7 +352,7 @@ class AIShellApp:
             if selected and selected != self.model_manager.current_model:
                 self.model_manager.switch_model(selected)
             elif selected:
-                self.ui.console.print(f"[dim]Already using {self.model_manager.get_model_display_name(selected)}[/dim]")
+                self.ui.console.print(f"[muted]Already using {self.model_manager.get_model_display_name(selected)}[/muted]")
             return True
         elif user_input.lower().startswith("/model "):
             model_alias = user_input[7:].strip()
@@ -361,7 +364,7 @@ class AIShellApp:
     def _show_status(self):
         """Show conversation status"""
         status = self.conversation_manager.get_status_info()
-        self.ui.console.print(f"\n[bold cyan]Conversation Status:[/bold cyan]")
+        self.ui.console.print(f"\n[bold accent]Conversation Status:[/bold accent]")
         self.ui.console.print(f"Session ID: {status['session_id']}")
         self.ui.console.print(f"Started: {status['started_at']}")
         self.ui.console.print(f"Messages: {status['message_count']}")
@@ -376,7 +379,7 @@ class AIShellApp:
             prunable_count = sum(1 for msg in self.chat_manager.payload if msg.get("_prunable") and msg.get("_state") != "pruned")
             pruned_count = sum(1 for msg in self.chat_manager.payload if msg.get("_state") == "pruned")
             distilled_count = sum(1 for msg in self.chat_manager.payload if msg.get("_state") == "distilled")
-            self.ui.console.print(f"\n[bold cyan]Context Stats:[/bold cyan]")
+            self.ui.console.print(f"\n[bold accent]Context Stats:[/bold accent]")
             self.ui.console.print(f"Estimated tokens: ~{total_tokens}")
             self.ui.console.print(f"Prunable messages: {prunable_count}")
             self.ui.console.print(f"Pruned: {pruned_count} | Distilled: {distilled_count}")
@@ -388,7 +391,7 @@ class AIShellApp:
         # Check if incognito is enabled in config
         incognito_config = self.config.get("incognito", {})
         if not incognito_config.get("enabled", True):
-            self.ui.console.print("[yellow]Incognito mode is disabled in configuration[/yellow]")
+            self.ui.console.print("[warning]Incognito mode is disabled in configuration[/warning]")
             self.incognito_mode = False
             return
         
@@ -402,16 +405,16 @@ class AIShellApp:
             # Get incognito model display name
             model_info = incognito_config.get("model", {})
             model_display = model_info.get("display_name", "Local Model")
-            self.ui.console.print(f"[bold magenta]🕶️  Incognito mode ON[/bold magenta] - Using {model_display}")
-            self.ui.console.print("[dim]Conversations will not be saved in incognito mode[/dim]")
+            self.ui.console.print(f"[bold accent_alt]🕶️  Incognito mode ON[/bold accent_alt] - Using {model_display}")
+            self.ui.console.print("[muted]Conversations will not be saved in incognito mode[/muted]")
         else:
             current_model = self.model_manager.get_model_display_name(self.model_manager.current_model)
-            self.ui.console.print(f"[bold cyan]👁️  Incognito mode OFF[/bold cyan] - Using {current_model}")
+            self.ui.console.print(f"[bold accent]👁️  Incognito mode OFF[/bold accent] - Using {current_model}")
     
     def _compact_payload(self):
         """Compact all command output messages in the current payload"""
         if not self.chat_manager or not self.chat_manager.payload:
-            self.ui.console.print("[yellow]No payload to compact[/yellow]")
+            self.ui.console.print("[warning]No payload to compact[/warning]")
             return
         
         compacted_count = 0
@@ -426,13 +429,13 @@ class AIShellApp:
                     compacted_count += 1
         
         if compacted_count > 0:
-            self.ui.console.print(f"[bold green]📦 Compacted {compacted_count} command output messages in payload[/bold green]")
+            self.ui.console.print(f"[bold success]📦 Compacted {compacted_count} command output messages in payload[/bold success]")
             
             # Update conversation manager if available
             if self.conversation_manager:
                 self.conversation_manager.update_payload(self.chat_manager.payload)
         else:
-            self.ui.console.print("[yellow]No command output messages found to compact[/yellow]")
+            self.ui.console.print("[warning]No command output messages found to compact[/warning]")
     
     def _handle_reset_config(self):
         """Handle the /resetconfig command to re-run setup wizard"""
@@ -454,7 +457,7 @@ class AIShellApp:
             self.max_retries = settings.get("max_retries", 10)
             self.ai_mode = settings.get("default_mode", "ai").lower() == "ai"
             
-            self.ui.console.print("[green]Configuration reloaded successfully![/green]")
+            self.ui.console.print("[success]Configuration reloaded successfully![/success]")
     
     def _truncate_system_message_outputs(self, content: str, max_length: int = 500) -> str:
         """Truncate command outputs within system messages"""
@@ -567,7 +570,7 @@ class AIShellApp:
         """Handle empty AI response"""
         assert self.chat_manager is not None
         
-        self.ui.console.print("[yellow]AI provided empty response - treating as task completion signal.[/yellow]")
+        self.ui.console.print("[warning]AI provided empty response - treating as task completion signal.[/warning]")
         
         if self.original_request:
             msg = {
@@ -591,7 +594,7 @@ class AIShellApp:
         """Handle response with multiple commands/searches/context operations"""
         assert self.chat_manager is not None
         
-        self.ui.console.print(f"[red]Multiple actions detected ({total_actions} actions). Asking AI to correct.[/red]")
+        self.ui.console.print(f"[error]Multiple actions detected ({total_actions} actions). Asking AI to correct.[/error]")
         msg = {
             "role": "user", 
             "content": f"SYSTEM MESSAGE: You provided {total_actions} action blocks in one response, which is forbidden. You must provide EXACTLY ONE command, search, or context management block per response. Please choose the FIRST action you need to take and provide it alone with explanation."
@@ -601,7 +604,7 @@ class AIShellApp:
         self.rejudge = True
         self.rejudge_count += 1
         if self.rejudge_count > 3:
-            self.ui.console.print(f"[red]Too many multiple action violations. Resetting conversation.[/red]")
+            self.ui.console.print(f"[error]Too many multiple action violations. Resetting conversation.[/error]")
             self.chat_manager.clear_history()
             self.context_manager.reset()
             self.rejudge = False
@@ -620,7 +623,7 @@ class AIShellApp:
         if display_text:
             md = Markdown(display_text)
             self.ui.console.print()
-            self.ui.console.print(self.ui.ai_panel(md, border_style="dim"))
+            self.ui.console.print(self.ui.ai_panel(md))
             self.ui.console.print()
 
     def _handle_context_distill(self, response, distill_blocks):
@@ -641,20 +644,20 @@ class AIShellApp:
             result = self.context_manager.distill(self.chat_manager.payload, msg_id, summary)
             if result:
                 distilled_id, label = result
-                self.ui.console.print(f"[dim]  Distilled #{distilled_id}: {label}[/dim]")
+                self.ui.console.print(f"[muted]  Distilled #{distilled_id}: {label}[/muted]")
                 # Inject continuation message
                 msg = {"role": "user", "content": "SYSTEM MESSAGE: Context management applied. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management confirmation")
                 self.rejudge = True
             else:
-                self.ui.console.print(f"[dim yellow]  ✗ Could not distill message #{msg_id} (not found, already pruned, or not prunable)[/dim yellow]")
+                self.ui.console.print(f"[warning]  ✗ Could not distill message #{msg_id} (not found, already pruned, or not prunable)[/warning]")
                 msg = {"role": "user", "content": f"SYSTEM MESSAGE: Could not distill message #{msg_id}. It may not exist, may already be pruned, or is not a prunable message. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management error")
                 self.rejudge = True
         else:
-            self.ui.console.print(f"[dim yellow]  ✗ Invalid context_distill format[/dim yellow]")
+            self.ui.console.print(f"[warning]  ✗ Invalid context_distill format[/warning]")
             msg = {"role": "user", "content": "SYSTEM MESSAGE: Invalid context_distill format. Use: id: <number> and summary: <text>. Continue with your task."}
             self.chat_manager.payload.append(msg)
             self.context_manager.assign_metadata(msg, label="Context management error")
@@ -678,19 +681,19 @@ class AIShellApp:
             pruned_info = self.context_manager.prune(self.chat_manager.payload, msg_ids)
             if pruned_info:
                 for pruned_id, label in pruned_info:
-                    self.ui.console.print(f"[dim]  Pruned #{pruned_id}: {label}[/dim]")
+                    self.ui.console.print(f"[muted]  Pruned #{pruned_id}: {label}[/muted]")
                 msg = {"role": "user", "content": "SYSTEM MESSAGE: Context management applied. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management confirmation")
                 self.rejudge = True
             else:
-                self.ui.console.print(f"[dim yellow]  ✗ No messages were pruned (IDs not found or already pruned)[/dim yellow]")
+                self.ui.console.print(f"[warning]  ✗ No messages were pruned (IDs not found or already pruned)[/warning]")
                 msg = {"role": "user", "content": f"SYSTEM MESSAGE: Could not prune messages with IDs {msg_ids}. They may not exist or are already pruned. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management error")
                 self.rejudge = True
         else:
-            self.ui.console.print(f"[dim yellow]  ✗ Invalid context_prune format[/dim yellow]")
+            self.ui.console.print(f"[warning]  ✗ Invalid context_prune format[/warning]")
             msg = {"role": "user", "content": "SYSTEM MESSAGE: Invalid context_prune format. Use: ids: <id1>, <id2>, ... Continue with your task."}
             self.chat_manager.payload.append(msg)
             self.context_manager.assign_metadata(msg, label="Context management error")
@@ -714,19 +717,19 @@ class AIShellApp:
             result = self.context_manager.untruncate(self.chat_manager.payload, msg_id)
             if result:
                 untruncated_id, label = result
-                self.ui.console.print(f"[dim]  Untruncated #{untruncated_id}: {label}[/dim]")
+                self.ui.console.print(f"[muted]  Untruncated #{untruncated_id}: {label}[/muted]")
                 msg = {"role": "user", "content": "SYSTEM MESSAGE: Message untruncated - full content is now visible. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management confirmation")
                 self.rejudge = True
             else:
-                self.ui.console.print(f"[dim yellow]  ✗ Could not untruncate message #{msg_id} (not truncated or not found)[/dim yellow]")
+                self.ui.console.print(f"[warning]  ✗ Could not untruncate message #{msg_id} (not truncated or not found)[/warning]")
                 msg = {"role": "user", "content": f"SYSTEM MESSAGE: Could not untruncate message #{msg_id}. It may not be truncated or does not exist. Continue with your task."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label="Context management error")
                 self.rejudge = True
         else:
-            self.ui.console.print(f"[dim yellow]  ✗ Invalid context_untruncate format[/dim yellow]")
+            self.ui.console.print(f"[warning]  ✗ Invalid context_untruncate format[/warning]")
             msg = {"role": "user", "content": "SYSTEM MESSAGE: Invalid context_untruncate format. Use: id: <number>. Continue with your task."}
             self.chat_manager.payload.append(msg)
             self.context_manager.assign_metadata(msg, label="Context management error")
@@ -805,7 +808,7 @@ class AIShellApp:
         # Execute command
         command = commands[0].strip()
         if not command:
-            self.ui.console.print("[yellow]Empty command block detected.[/yellow]")
+            self.ui.console.print("[warning]Empty command block detected.[/warning]")
             return
         
         self._execute_command_with_confirmation(command)
@@ -828,7 +831,7 @@ class AIShellApp:
         # Execute web search
         query = websearches[0].strip()
         if not query:
-            self.ui.console.print("[yellow]Empty web search block detected.[/yellow]")
+            self.ui.console.print("[warning]Empty web search block detected.[/warning]")
             return
         
         self._execute_web_search(query)
@@ -893,28 +896,28 @@ class AIShellApp:
         # Auto-approve safe (read-only) commands without asking
         if self.safe_commands and is_safe_command(command, self.safe_commands):
             cmd_display = command if len(command) <= 80 else command[:77] + "..."
-            panel_content = f"[bold white]Auto-executing safe command:[/bold white]\n[cyan]`{cmd_display}`[/cyan]"
-            self.ui.console.print(self.ui.ai_panel(panel_content, border_style="green", style="on grey15"))
+            panel_content = f"[bold fg]Auto-executing safe command:[/bold fg]\n[accent]`{cmd_display}`[/accent]"
+            self.ui.console.print(self.ui.ai_panel(panel_content, border_style=self.ui._t["success"], style=f"on {self.ui._t['block_alt']}"))
             self._execute_and_process_command(command)
             return
         
         # Ask for confirmation for non-safe commands — command + prompt inside one panel
         panel_content = (
-            f"[bold white]Execute command:[/bold white]\n"
-            f"[cyan]`{command}`[/cyan]\n\n"
-            f"[dim]\\[Y/Enter] Execute  \\[n] Decline  \\[a] Approve all[/dim]"
+            f"[bold fg]Execute command:[/bold fg]\n"
+            f"[accent]`{command}`[/accent]\n\n"
+            f"[muted]\\[Y/Enter] Execute  \\[n] Decline  \\[a] Approve all[/muted]"
         )
-        self.ui.console.print(self.ui.ai_panel(panel_content, border_style="yellow", style="on grey15"))
+        self.ui.console.print(self.ui.ai_panel(panel_content, border_style=self.ui._t["warning"], style=f"on {self.ui._t['block_alt']}"))
         
         assert self.terminal_input is not None
         user_choice = self.terminal_input.get_instant_confirmation()
         
         if user_choice == "a":
             self.auto_approve_commands = True
-            self.ui.console.print("[green]Auto-approving all commands for this request[/green]")
+            self.ui.console.print("[success]Auto-approving all commands for this request[/success]")
             self._execute_and_process_command(command)
         elif user_choice == "n":
-            self.ui.console.print("[yellow]Command declined.[/yellow]")
+            self.ui.console.print("[warning]Command declined.[/warning]")
             cmd_label = command[:60] + "..." if len(command) > 60 else command
             msg = {"role": "user", "content": f"SYSTEM MESSAGE: Tool use declined by user. The user chose not to execute: `{command}`"}
             self.chat_manager.payload.append(msg)
@@ -930,12 +933,12 @@ class AIShellApp:
         
         # Check if web search is available
         if not self.web_search_manager.is_available():
-            self.ui.console.print("[red]Web search is not available. Please configure a search model in your config (e.g. perplexity/sonar-pro).[/red]")
+            self.ui.console.print("[error]Web search is not available. Please configure a search model in your config (e.g. perplexity/sonar-pro).[/error]")
             return
         
         # Display search query
-        panel_content = f"[bold white]Web search query:[/bold white] [cyan]{query}[/cyan]"
-        self.ui.console.print(Panel(panel_content, title="[cyan]Web Search[/cyan]", border_style="cyan"))
+        panel_content = f"[bold fg]Web search query:[/bold fg] [accent]{query}[/accent]"
+        self.ui.console.print(Panel(panel_content, title="[accent]Web Search[/accent]", border_style=self.ui._t["accent"]))
         
         # Execute the search
         search_response = self.web_search_manager.search(query)
@@ -960,7 +963,7 @@ class AIShellApp:
             self.rejudge = True
         else:
             # Search failed
-            self.ui.console.print("[red]Web search failed. Please try a different query or approach.[/red]")
+            self.ui.console.print("[error]Web search failed. Please try a different query or approach.[/error]")
             msg = {"role": "user", "content": f"SYSTEM MESSAGE: Web search failed for query: {query}\n\nPlease try a different approach or rephrase the search query."}
             self.chat_manager.payload.append(msg)
             self.context_manager.assign_metadata(msg, label=f"Web search failed: {query_label}")
@@ -978,7 +981,7 @@ class AIShellApp:
         truncated_result, was_truncated, original_result = self.context_manager.auto_truncate(result)
         
         if was_truncated:
-            self.ui.console.print(f"[dim]  Output auto-truncated ({len(result)} chars → {len(truncated_result)} chars)[/dim]")
+            self.ui.console.print(f"[muted]  Output auto-truncated ({len(result)} chars → {len(truncated_result)} chars)[/muted]")
         
         # Track conversation
         self.conversation_history.append(f"Command: {command}")
@@ -1024,7 +1027,7 @@ class AIShellApp:
             # Reset auto-approve state when task is complete
             self.auto_approve_commands = False
             # Task is complete
-            with self.ui.console.status("[bold green]Preparing summary...[/bold green]", spinner_style="green"):
+            with self.ui.console.status("[bold success]Preparing summary...[/bold success]", spinner_style=self.ui._t["accent"]):
                 msg = {"role": "user", "content": f"SYSTEM MESSAGE: Task completed successfully. Command executed: {command}\nCommand output: {truncated_result}\nSuccess: {success}\n\nPlease provide a brief summary of what was accomplished based on the command output, or answer if the original request was a question."}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label=f"Command output: {cmd_label}")
@@ -1047,24 +1050,24 @@ class AIShellApp:
         
         if self.retry_count < self.max_retries:
             self.retry_count += 1
-            with self.ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
+            with self.ui.console.status("[bold warning]Preparing retry...[/bold warning]", spinner_style=self.ui._t["warning"]):
                 msg = {"role": "user", "content": f"SYSTEM MESSAGE: Command executed but task status check failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nPlease try a different approach to complete: {self.original_request}"}
                 self.chat_manager.payload.append(msg)
                 self.context_manager.assign_metadata(msg, label=f"Task failure: {cmd_label}")
             self.rejudge = True
         else:
-            self.ui.console.print(f"[yellow]Maximum retry attempts ({self.max_retries}) reached.[/yellow]")
+            self.ui.console.print(f"[warning]Maximum retry attempts ({self.max_retries}) reached.[/warning]")
             assert self.terminal_input is not None
             retry_choice = self.terminal_input.get_confirmation("Do you want to continue trying? [Y/n]", "N").upper()
             if retry_choice == "Y":
                 self.retry_count = 0
-                with self.ui.console.status("[bold yellow]Preparing retry...[/bold yellow]", spinner_style="yellow"):
+                with self.ui.console.status("[bold warning]Preparing retry...[/bold warning]", spinner_style=self.ui._t["warning"]):
                     msg = {"role": "user", "content": f"SYSTEM MESSAGE: Command executed but failed.\nCommand: {command}\nOutput: {result}\nSuccess: {success}\n\nUser requested to continue trying. Please try a different approach to complete: {self.original_request}"}
                     self.chat_manager.payload.append(msg)
                     self.context_manager.assign_metadata(msg, label=f"Task failure retry: {cmd_label}")
                 self.rejudge = True
             else:
-                with self.ui.console.status("[bold red]Preparing summary...[/bold red]", spinner_style="red"):
+                with self.ui.console.status("[bold error]Preparing summary...[/bold error]", spinner_style=self.ui._t["error"]):
                     msg = {"role": "user", "content": f"SYSTEM MESSAGE: Task failed after {self.max_retries} attempts and user chose to stop. Please provide a summary of what was attempted and suggest alternatives."}
                     self.chat_manager.payload.append(msg)
                     self.context_manager.assign_metadata(msg, label="Task stopped")

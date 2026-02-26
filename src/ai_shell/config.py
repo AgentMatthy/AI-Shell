@@ -13,6 +13,7 @@ from .constants import (
     DEFAULT_PROMPT_SECTIONS, DEFAULT_PROMPT_SECTIONS_DIRECT,
     DEFAULT_PROMPT_SECTIONS_INCOGNITO,
 )
+from .theme import DEFAULT_THEME
 
 
 def run_setup_wizard(console: Console) -> Dict[str, Any]:
@@ -335,6 +336,9 @@ def _validate_and_normalize_config(config: Dict[str, Any], console: Console) -> 
     # Ensure prompt config exists with valid defaults
     _ensure_prompt_config(config)
     
+    # Ensure theme config exists with valid defaults
+    _ensure_theme_config(config)
+    
     return config
 
 def _validate_required_fields(config: Dict[str, Any], console: Console, required_fields: List[str]) -> None:
@@ -404,3 +408,13 @@ def _ensure_prompt_config(config: Dict[str, Any]) -> None:
         prompt_cfg["incognito"] = [dict(s) for s in DEFAULT_PROMPT_SECTIONS_INCOGNITO]
     else:
         prompt_cfg["incognito"] = [_validate_prompt_section(s) for s in prompt_cfg["incognito"]]
+
+
+def _ensure_theme_config(config: Dict[str, Any]) -> None:
+    """Ensure theme config exists with valid defaults from DEFAULT_THEME."""
+    if "theme" not in config:
+        config["theme"] = {}
+    theme = config["theme"]
+    for key, default_value in DEFAULT_THEME.items():
+        if key not in theme or not theme[key]:
+            theme[key] = default_value

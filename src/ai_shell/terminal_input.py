@@ -33,11 +33,12 @@ from .commands import get_prompt_directory
 class InteractiveModelSelector:
     """Interactive model picker with arrow/jk navigation and / search."""
 
-    def __init__(self, models: list, current_alias: str):
+    def __init__(self, models: list, current_alias: str, theme: dict = None):
         """
         Args:
             models: List of dicts with keys: alias, display_name, api_name
             current_alias: The currently active model alias
+            theme: Optional theme dict for colors
         """
         self.all_models = models
         self.current_alias = current_alias
@@ -46,6 +47,7 @@ class InteractiveModelSelector:
         self.search_mode = False
         self.search_text = ""
         self.result = None  # Will hold selected alias or None
+        self.theme = theme or {}
 
         # Pre-select the current model
         for i, m in enumerate(self.filtered_models):
@@ -73,28 +75,29 @@ class InteractiveModelSelector:
         """Return formatted text tuples for the model list."""
         fragments = []
         if not self.filtered_models:
-            fragments.append(("class:ms.dim", "  No models match your search.\n"))
+            fragments.append(("class:ms.dim", "  no results\n"))
             return fragments
 
         for i, m in enumerate(self.filtered_models):
             is_selected = (i == self.selected_index)
             is_current = (m["alias"] == self.current_alias)
-            marker = " ✓" if is_current else "  "
 
             if is_selected:
-                style = "class:ms.selected"
-                pointer = " ▸ "
-            else:
-                style = "class:ms.item"
+                pointer = " > "
+                name_style = "class:ms.accent"
+                alias_style = "class:ms.accent.dim"
+            elif is_current:
                 pointer = "   "
+                name_style = "class:ms.current"
+                alias_style = "class:ms.dim"
+            else:
+                pointer = "   "
+                name_style = "class:ms.item"
+                alias_style = "class:ms.dim"
 
-            line = f"{pointer}{m['display_name']}{marker}"
-            # Pad to consistent width
-            line = line.ljust(40)
-            detail = f"  {m['alias']}  ({m['api_name']})"
-
-            fragments.append((style, line))
-            fragments.append(("class:ms.dim" if not is_selected else "class:ms.selected.dim", detail))
+            fragments.append(("class:ms.accent" if is_selected else "class:ms.dim", pointer))
+            fragments.append((name_style, m['display_name']))
+            fragments.append((alias_style, f"  {m['alias']}"))
             fragments.append(("", "\n"))
 
         # Remove trailing newline
@@ -104,29 +107,24 @@ class InteractiveModelSelector:
         return fragments
 
     def _get_header_content(self):
-        """Return formatted text for the header bar."""
+        """Return formatted text for the header."""
         return [
-            ("class:ms.header", " Select Model "),
-            ("class:ms.dim", "  ↑↓/jk: navigate  /: search  enter: select  esc: cancel\n"),
-            ("class:ms.border", "─" * 70 + "\n"),
+            ("class:ms.accent", " models\n"),
         ]
 
     def _get_search_content(self):
         """Return formatted text for the search bar."""
         if self.search_mode:
             return [
-                ("class:ms.border", "─" * 70 + "\n"),
-                ("class:ms.search.label", " / "),
-                ("class:ms.search.text", self.search_text),
-                ("class:ms.search.cursor", "█"),
+                ("class:ms.accent", "\n / "),
+                ("class:ms.item", self.search_text),
+                ("class:ms.accent", "█"),
             ]
         elif self.search_text:
             return [
-                ("class:ms.border", "─" * 70 + "\n"),
-                ("class:ms.dim", f" filter: {self.search_text}  "),
-                ("class:ms.dim", "(/ to edit, esc to clear)"),
+                ("class:ms.dim", f"\n / {self.search_text}"),
             ]
-        return []
+        return [("", "\n")]
 
     def run(self) -> str | None:
         """Show the interactive selector. Returns selected alias or None."""
@@ -144,9 +142,9 @@ class InteractiveModelSelector:
         search_control = FormattedTextControl(lambda: selector._get_search_content())
 
         layout = Layout(HSplit([
-            Window(header_control, height=2),
+            Window(header_control, height=1),
             Window(list_control, height=min(len(self.all_models), 20)),
-            Window(search_control, height=3),
+            Window(search_control, height=2),
         ]))
 
         kb = KeyBindings()
@@ -215,16 +213,14 @@ class InteractiveModelSelector:
                 selector.search_text += char
                 selector._apply_filter()
 
+        accent = selector.theme.get("accent", "#0066cc")
+        muted = selector.theme.get("muted", "#555555")
         style = Style.from_dict({
-            "ms.header": "#0066cc bold",
-            "ms.border": "#333333",
+            "ms.accent": f"{accent} bold",
+            "ms.accent.dim": accent,
+            "ms.current": accent,
             "ms.item": "",
-            "ms.selected": "#ffffff bg:#0066cc bold",
-            "ms.selected.dim": "#bbbbbb bg:#0066cc",
-            "ms.dim": "#666666",
-            "ms.search.label": "#0066cc bold",
-            "ms.search.text": "#ffffff bold",
-            "ms.search.cursor": "#0066cc",
+            "ms.dim": muted,
         })
 
         app = Application(
@@ -375,18 +371,23 @@ class TerminalInput:
     
     def _build_style(self) -> Style:
         """Build prompt_toolkit Style with dynamic per-section entries."""
+        from .theme import get_theme
+        t = get_theme(self.config)
+        accent = t.get("accent", "#0066cc")
+        accent_alt = t.get("accent_alt", "#00cc66")
+        muted = t.get("muted", "#555555")
         style_dict = {
             # Fallback prompt styles (used by confirmation/reason prompts)
-            'prompt.ai': '#0066cc bold',
-            'prompt.direct': '#00cc66 bold',
+            'prompt.ai': f'{accent} bold',
+            'prompt.direct': f'{accent_alt} bold',
             'prompt.incognito': '#8b3fbb bold',
-            'prompt.path': '#666666',
+            'prompt.path': muted,
             # Completion menu styles
             'completion-menu.completion': 'noinherit',
-            'completion-menu.completion.current': '#ffffff bg:#0066cc bold',
+            'completion-menu.completion.current': f'#ffffff bg:{accent} bold',
             'completion-menu.meta': 'noinherit',
             'completion': 'noinherit',
-            'completion.current': '#ffffff bg:#0066cc bold',
+            'completion.current': f'#ffffff bg:{accent} bold',
             'scrollbar.background': 'hidden',
             'scrollbar.button': 'hidden',
             'scrollbar.arrow': 'hidden',
@@ -602,5 +603,7 @@ class TerminalInput:
         Returns:
             Selected model alias, or None if cancelled.
         """
-        selector = InteractiveModelSelector(models, current_alias)
+        from .theme import get_theme
+        theme = get_theme(self.config)
+        selector = InteractiveModelSelector(models, current_alias, theme)
         return selector.run()

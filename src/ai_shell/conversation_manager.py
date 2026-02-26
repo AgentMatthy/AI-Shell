@@ -5,16 +5,17 @@ import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
-from rich.console import Console
 from rich.table import Table
 from rich.prompt import Confirm, Prompt
+from .theme import create_console, get_theme
 
 class ConversationManager:
     """Manages conversation persistence, auto-save, and recovery"""
     
     def __init__(self, config: Dict, ui_manager=None):
         self.config = config
-        self.console = Console()
+        self.console = create_console(config)
+        self._t = get_theme(config or {})
         self.ui_manager = ui_manager
         self.incognito_mode = False
         
@@ -81,7 +82,7 @@ class ConversationManager:
             with open(filepath, 'w', encoding='utf-8') as f:
                 json.dump(session, f, indent=2, ensure_ascii=False)
         except Exception as e:
-            self.console.print(f"[red]Error saving session: {e}[/red]")
+            self.console.print(f"[error]Error saving session: {e}[/error]")
     
     def _load_session_from_file(self, filepath: Path) -> Optional[Dict]:
         """Load session data from a file"""
@@ -90,7 +91,7 @@ class ConversationManager:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception as e:
-            self.console.print(f"[red]Error loading session: {e}[/red]")
+            self.console.print(f"[error]Error loading session: {e}[/error]")
         return None
     
     def check_for_resume(self) -> Optional[Dict]:
@@ -117,14 +118,14 @@ class ConversationManager:
             
             time_str = "just now" if hours_ago < 0.1 else f"{int(hours_ago)} hour{'s' if hours_ago > 1 else ''} ago"
             
-            self.console.print(f"\n[yellow]Found previous conversation from {time_str}:[/yellow]")
-            self.console.print(f"[dim]{summary}[/dim]")
+            self.console.print(f"\n[warning]Found previous conversation from {time_str}:[/warning]")
+            self.console.print(f"[muted]{summary}[/muted]")
             
             if Confirm.ask("Resume previous session?", default=True):
                 return session
                 
         except Exception as e:
-            self.console.print(f"[red]Error checking resume: {e}[/red]")
+            self.console.print(f"[error]Error checking resume: {e}[/error]")
         
         return None
     
@@ -138,11 +139,11 @@ class ConversationManager:
         payload = session.get("payload", [])
         
         # Show brief context
-        self.console.print("[green]✓ Session resumed successfully[/green]")
+        self.console.print("[success]✓ Session resumed successfully[/success]")
         if payload:
             original_request = session.get("metadata", {}).get("original_request", "")
             if original_request:
-                self.console.print(f"[dim]Original request: {original_request}[/dim]")
+                self.console.print(f"[muted]Original request: {original_request}[/muted]")
         
         # Display the conversation messages if ui_manager is available
         if self.ui_manager and payload:
@@ -184,11 +185,11 @@ class ConversationManager:
     def save_conversation(self, name: Optional[str] = None) -> bool:
         """Save current conversation with optional name"""
         if self.incognito_mode:
-            self.console.print("[yellow]Cannot save conversations in incognito mode[/yellow]")
+            self.console.print("[warning]Cannot save conversations in incognito mode[/warning]")
             return False
             
         if not self.current_session["payload"]:
-            self.console.print("[yellow]No conversation to save[/yellow]")
+            self.console.print("[warning]No conversation to save[/warning]")
             return False
         
         if not name:
@@ -213,7 +214,7 @@ class ConversationManager:
         save_session["metadata"]["saved_name"] = safe_name
         
         self._save_session_to_file(filepath, save_session)
-        self.console.print(f"[green]✓ Conversation saved as '{safe_name}'[/green]")
+        self.console.print(f"[success]✓ Conversation saved as '{safe_name}'[/success]")
         return True
     
     def load_conversation(self, name: Optional[str] = None) -> Optional[List[Dict]]:
@@ -233,7 +234,7 @@ class ConversationManager:
         filepath = self.saved_path / f"{safe_name}.json"
         
         if not filepath.exists():
-            self.console.print(f"[red]Conversation '{name}' not found[/red]")
+            self.console.print(f"[error]Conversation '{name}' not found[/error]")
             return None
         
         session = self._load_session_from_file(filepath)
@@ -251,7 +252,7 @@ class ConversationManager:
         self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
         
         payload = session.get("payload", [])
-        self.console.print(f"[green]✓ Loaded conversation '{name}'[/green]")
+        self.console.print(f"[success]✓ Loaded conversation '{name}'[/success]")
         
         # Display the conversation messages if ui_manager is available
         if self.ui_manager and payload:
@@ -262,9 +263,9 @@ class ConversationManager:
     def list_conversations(self):
         """Display all saved conversations"""
         table = Table(title="Saved Conversations")
-        table.add_column("Name", style="cyan")
-        table.add_column("Date", style="dim")
-        table.add_column("Summary", style="white")
+        table.add_column("Name", style="accent")
+        table.add_column("Date", style="muted")
+        table.add_column("Summary", style="fg")
         
         # Get saved conversations
         saved_files = list(self.saved_path.glob("*.json"))
@@ -288,24 +289,24 @@ class ConversationManager:
                 table.add_row(name, date_str, summary)
         
         if not saved_files:
-            self.console.print("[yellow]No saved conversations found[/yellow]")
+            self.console.print("[warning]No saved conversations found[/warning]")
         else:
             self.console.print(table)
 
     def list_recent_conversations(self):
         """Display recent conversations with easy-to-use indices"""
         table = Table(title="Recent Conversations")
-        table.add_column("#", style="yellow", width=3)
-        table.add_column("Last Used", style="dim")
-        table.add_column("Summary", style="white")
-        table.add_column("Messages", style="cyan", width=8)
+        table.add_column("#", style="warning", width=3)
+        table.add_column("Last Used", style="muted")
+        table.add_column("Summary", style="fg")
+        table.add_column("Messages", style="accent", width=8)
         
         # Get recent conversations
         recent_files = list(self.recent_path.glob("*.json"))
         recent_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
         
         if not recent_files:
-            self.console.print("[yellow]No recent conversations found[/yellow]")
+            self.console.print("[warning]No recent conversations found[/warning]")
             return []
         
         # Store file mapping for loading
@@ -351,7 +352,7 @@ class ConversationManager:
                 table.add_row(str(i), date_str, summary, str(message_count))
         
         self.console.print(table)
-        self.console.print(f"\n[dim]Use '/load <number>' to load a conversation by its index number[/dim]")
+        self.console.print(f"\n[muted]Use '/load <number>' to load a conversation by its index number[/muted]")
         return file_mapping
     
     def load_recent_conversation(self, index: int) -> Optional[List[Dict]]:
@@ -360,18 +361,18 @@ class ConversationManager:
         recent_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
         
         if not recent_files:
-            self.console.print("[yellow]No recent conversations found[/yellow]")
+            self.console.print("[warning]No recent conversations found[/warning]")
             return None
         
         if index < 1 or index > len(recent_files):
-            self.console.print(f"[red]Invalid index. Please choose a number between 1 and {len(recent_files)}[/red]")
+            self.console.print(f"[error]Invalid index. Please choose a number between 1 and {len(recent_files)}[/error]")
             return None
         
         filepath = recent_files[index - 1]  # Convert to 0-based index
         session = self._load_session_from_file(filepath)
         
         if not session:
-            self.console.print("[red]Failed to load conversation[/red]")
+            self.console.print("[error]Failed to load conversation[/error]")
             return None
         
         # Archive current session if it has content
@@ -385,7 +386,7 @@ class ConversationManager:
         self.current_session["metadata"]["last_used"] = datetime.now().isoformat()
         
         summary = session.get("metadata", {}).get("summary", "No summary")
-        self.console.print(f"[green]✓ Loaded recent conversation: {summary}[/green]")
+        self.console.print(f"[success]✓ Loaded recent conversation: {summary}[/success]")
         
         payload = session.get("payload", [])
         # Display the conversation messages if ui_manager is available
@@ -397,7 +398,7 @@ class ConversationManager:
     def archive_conversation(self) -> bool:
         """Archive the current conversation"""
         if not self.current_session["payload"]:
-            self.console.print("[yellow]No conversation to archive[/yellow]")
+            self.console.print("[warning]No conversation to archive[/warning]")
             return False
         
         # Move to archive
@@ -411,7 +412,7 @@ class ConversationManager:
         # Clear current session
         self._start_new_session()
         
-        self.console.print("[green]Conversation archived[/green]")
+        self.console.print("[success]Conversation archived[/success]")
         return True
     
     def delete_conversation(self, name: Optional[str] = None) -> bool:
@@ -429,16 +430,16 @@ class ConversationManager:
         filepath = self.saved_path / f"{safe_name}.json"
         
         if not filepath.exists():
-            self.console.print(f"[red]Conversation '{name}' not found[/red]")
+            self.console.print(f"[error]Conversation '{name}' not found[/error]")
             return False
         
         if Confirm.ask(f"Delete conversation '{name}'?", default=False):
             try:
                 filepath.unlink()
-                self.console.print(f"[green]✓ Deleted conversation '{name}'[/green]")
+                self.console.print(f"[success]✓ Deleted conversation '{name}'[/success]")
                 return True
             except Exception as e:
-                self.console.print(f"[red]Error deleting conversation: {e}[/red]")
+                self.console.print(f"[error]Error deleting conversation: {e}[/error]")
         
         return False
     
@@ -471,7 +472,7 @@ class ConversationManager:
                 try:
                     old_file.unlink()
                 except (OSError, PermissionError) as e:
-                    self.console.print(f"[yellow]Warning: Could not delete old conversation file {old_file.name}: {e}[/yellow]")
+                    self.console.print(f"[warning]Warning: Could not delete old conversation file {old_file.name}: {e}[/warning]")
     
     def _start_new_session(self):
         """Start a new conversation session"""
@@ -518,7 +519,7 @@ class ConversationManager:
                 except:
                     pass
         
-        self.console.print("[green]Conversation saved[/green]")
+        self.console.print("[success]Conversation saved[/success]")
     
     def get_status_info(self) -> Dict:
         """Get current conversation status information"""

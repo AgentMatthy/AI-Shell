@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 
 from typing import Dict, Any, Optional
-from rich.console import Console
 from openai import OpenAI
+
+from .theme import create_console, get_theme
 
 
 class WebSearchManager:
@@ -10,7 +11,8 @@ class WebSearchManager:
     
     def __init__(self, config: Dict[str, Any]):
         self.config = config
-        self.console = Console()
+        self.theme = get_theme(config)
+        self.console = create_console(config)
         self.client = None
         self.search_model = None
         self._initialize_client()
@@ -27,7 +29,7 @@ class WebSearchManager:
             # Get the search model name
             self.search_model = search_config.get("model", "")
             if not self.search_model:
-                self.console.print("[yellow]Warning: No search model configured. Web search disabled.[/yellow]")
+                self.console.print("[warning]Warning: No search model configured. Web search disabled.[/warning]")
                 return
             
             # Use search-specific API settings, or fall back to main API settings
@@ -35,7 +37,7 @@ class WebSearchManager:
             api_key = search_config.get("api_key", "") or self.config.get("api", {}).get("api_key", "")
             
             if not api_url or not api_key:
-                self.console.print("[yellow]Warning: API configuration missing for search model. Web search disabled.[/yellow]")
+                self.console.print("[warning]Warning: API configuration missing for search model. Web search disabled.[/warning]")
                 return
             
             self.client = OpenAI(
@@ -44,7 +46,7 @@ class WebSearchManager:
             )
             
         except Exception as e:
-            self.console.print(f"[red]Error initializing search model client: {e}[/red]")
+            self.console.print(f"[error]Error initializing search model client: {e}[/error]")
     
     def is_available(self) -> bool:
         """Check if web search is available"""
@@ -55,6 +57,7 @@ class WebSearchManager:
         if not self.is_available():
             return None
         
+        t = self.theme
         try:
             search_config = self.config.get("web_search", {})
             system_prompt = search_config.get("system_prompt", 
@@ -67,7 +70,7 @@ class WebSearchManager:
                 {"role": "user", "content": query}
             ]
             
-            with self.console.status(f"[bold cyan]Searching with {self.search_model}...[/bold cyan]", spinner_style="cyan"):
+            with self.console.status(f"[bold accent]Searching with {self.search_model}...[/bold accent]", spinner_style=t["accent"]):
                 response = self.client.chat.completions.create(
                     model=self.search_model,
                     messages=messages,
@@ -80,7 +83,7 @@ class WebSearchManager:
             return None
             
         except Exception as e:
-            self.console.print(f"[red]Web search error: {e}[/red]")
+            self.console.print(f"[error]Web search error: {e}[/error]")
             return None
     
     def format_search_results(self, response: str) -> str:

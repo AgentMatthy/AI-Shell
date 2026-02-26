@@ -3,8 +3,9 @@
 import json
 import subprocess
 from pathlib import Path
-from rich.console import Console
 from openai import OpenAI
+
+from .theme import create_console, get_theme
 
 class ChatManager:
     def __init__(self, config, model_manager, conversation_manager=None, web_search_manager=None, context_manager=None):
@@ -13,7 +14,8 @@ class ChatManager:
         self.conversation_manager = conversation_manager
         self.web_search_manager = web_search_manager
         self.context_manager = context_manager
-        self.console = Console()
+        self.theme = get_theme(config)
+        self.console = create_console(config)
         self.payload = [{"role": "system", "content": self._get_system_prompt()}]
         self.incognito_mode = False
         
@@ -38,7 +40,7 @@ class ChatManager:
                     base_url=api_config.get("url", "http://localhost:11434/v1")
                 )
         except Exception as e:
-            self.console.print(f"[yellow]Warning: Failed to initialize incognito client: {e}[/yellow]")
+            self.console.print(f"[warning]Warning: Failed to initialize incognito client: {e}[/warning]")
     
     def set_incognito_mode(self, incognito_mode: bool):
         """Set incognito mode state"""
@@ -76,7 +78,7 @@ class ChatManager:
             
         except Exception as e:
             # Silently handle errors - don't break the system if context file has issues
-            self.console.print(f"[yellow]Warning: Could not load context file: {e}[/yellow]")
+            self.console.print(f"[warning]Warning: Could not load context file: {e}[/warning]")
             return ""
     
     def _get_system_prompt(self):
@@ -260,18 +262,18 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
             # Remove the user message from payload since we're cancelling
             if self.payload and self.payload[-1]["role"] == "user":
                 self.payload.pop()
-            self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
+            self.console.print("\n[warning]Response generation interrupted by user.[/warning]")
             return None, None
         except Exception as e:
             # Remove the user message from payload since we're cancelling
             if self.payload and self.payload[-1]["role"] == "user":
                 self.payload.pop()
-            self.console.print(f"[red]Error generating chat response: {e}[/red]")
+            self.console.print(f"[error]Error generating chat response: {e}[/error]")
             return None, None
     
 
     
-
+    
     
     def parse_response_type(self, response):
         """Parse response type from response tags"""
@@ -331,6 +333,7 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
     
     def _generate_response(self):
         """Internal method to generate response from current payload"""
+        t = self.theme
         try:
             # Get the current model name and client for the API request
             model_name = self.get_current_model_name()
@@ -347,7 +350,7 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
                 api_messages = self.payload
             
             # Make streaming API request - shows "Processing..." during connection establishment
-            with self.console.status("[bold cyan]Processing...[/bold cyan]", spinner_style="cyan"):
+            with self.console.status(f"[bold accent]Processing...[/bold accent]", spinner_style=t["accent"]):
                 response = client.chat.completions.create(
                     model=model_name, 
                     messages=api_messages, 
@@ -361,7 +364,7 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
             full_reply = ""
             has_reasoning = False
             
-            with self.console.status("[bold green]Thinking...[/bold green]") as status:
+            with self.console.status(f"[bold accent_alt]Thinking...[/bold accent_alt]") as status:
                 for chunk in response:
                     if chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
@@ -391,19 +394,19 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
             return assistant_response, "".join(reasoning_chunk)
                 
         except KeyboardInterrupt:
-            self.console.print("\n[yellow]Response generation interrupted by user.[/yellow]")
+            self.console.print(f"\n[warning]Response generation interrupted by user.[/warning]")
             return None, None
         except ConnectionError as e:
-            self.console.print(f"[red]Connection error: Unable to reach API server. {e}[/red]")
+            self.console.print(f"[error]Connection error: Unable to reach API server. {e}[/error]")
             return None, None
         except TimeoutError as e:
-            self.console.print(f"[red]Request timeout: API server took too long to respond. {e}[/red]")
+            self.console.print(f"[error]Request timeout: API server took too long to respond. {e}[/error]")
             return None, None
         except json.JSONDecodeError as e:
-            self.console.print(f"[red]Invalid response format from API: {e}[/red]")
+            self.console.print(f"[error]Invalid response format from API: {e}[/error]")
             return None, None
         except Exception as e:
-            self.console.print(f"[red]Unexpected error in _generate_response: {e}[/red]")
+            self.console.print(f"[error]Unexpected error in _generate_response: {e}[/error]")
             return None, None
 
     def clear_history(self):
@@ -413,4 +416,3 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
         # Update conversation manager if available
         if self.conversation_manager:
             self.conversation_manager.clear_conversation()
-        # self.console.print("[yellow]Conversation history cleared.[/yellow]")
