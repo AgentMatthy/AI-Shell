@@ -329,7 +329,27 @@ class AIShellApp:
     def _handle_model_commands(self, user_input):
         """Handle model management commands"""
         if user_input.lower() in ["/models", "/model", "/m"]:
-            self.model_manager.list_models()
+            # Build model list for the interactive selector
+            available = self.config.get("models", {}).get("available", {})
+            models = []
+            for alias, info in available.items():
+                models.append({
+                    "alias": alias,
+                    "display_name": info.get("display_name", alias),
+                    "api_name": info.get("name", "N/A"),
+                })
+            
+            if not models:
+                self.ui.console.print("[yellow]No models configured.[/yellow]")
+                return True
+            
+            selected = self.terminal_input.interactive_model_select(
+                models, self.model_manager.current_model
+            )
+            if selected and selected != self.model_manager.current_model:
+                self.model_manager.switch_model(selected)
+            elif selected:
+                self.ui.console.print(f"[dim]Already using {self.model_manager.get_model_display_name(selected)}[/dim]")
             return True
         elif user_input.lower().startswith("/model "):
             model_alias = user_input[7:].strip()

@@ -175,6 +175,42 @@ incognito:
   model:
     name: "artifish/llama3.2-uncensored"  # Local model name in Ollama
     display_name: "Llama 3.2 Uncensored"  # Human-readable model name
+
+# Prompt Editor - Customize how your terminal prompt looks
+# Define sections for each mode (ai, direct, incognito).
+# Each section has: text (with $variables), fg (text color), bg (background color).
+# Available variables: $model, $dir, $mode, $user, $host
+#
+# Using 'sections' applies the same prompt to all modes.
+# Using 'ai', 'direct', 'incognito' keys allows per-mode customization.
+prompt:
+  ai:
+    - text: "AI Shell "
+      fg: "#0066cc"
+    - text: "[$mode - $model] "
+      fg: "#0066cc"
+    - text: "$dir"
+      fg: "#666666"
+    - text: " > "
+      fg: "#0066cc"
+  direct:
+    - text: "AI Shell "
+      fg: "#00cc66"
+    - text: "[Direct] "
+      fg: "#00cc66"
+    - text: "$dir"
+      fg: "#666666"
+    - text: " > "
+      fg: "#00cc66"
+  incognito:
+    - text: "AI Shell "
+      fg: "#8b3fbb"
+    - text: "[Incognito - $model] "
+      fg: "#8b3fbb"
+    - text: "$dir"
+      fg: "#666666"
+    - text: " > "
+      fg: "#8b3fbb"
 ```
 
 ### Context

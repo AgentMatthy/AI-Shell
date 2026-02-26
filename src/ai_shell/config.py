@@ -8,7 +8,11 @@ from pathlib import Path
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
-from .constants import CONFIG_FILE_PATH, CONTEXT_FILE_PATH
+from .constants import (
+    CONFIG_FILE_PATH, CONTEXT_FILE_PATH,
+    DEFAULT_PROMPT_SECTIONS, DEFAULT_PROMPT_SECTIONS_DIRECT,
+    DEFAULT_PROMPT_SECTIONS_INCOGNITO,
+)
 
 
 def run_setup_wizard(console: Console) -> Dict[str, Any]:
@@ -328,6 +332,9 @@ def _validate_and_normalize_config(config: Dict[str, Any], console: Console) -> 
             }
         }
     
+    # Ensure prompt config exists with valid defaults
+    _ensure_prompt_config(config)
+    
     return config
 
 def _validate_required_fields(config: Dict[str, Any], console: Console, required_fields: List[str]) -> None:
@@ -347,3 +354,53 @@ def _validate_required_fields(config: Dict[str, Any], console: Console, required
         if not field_value or field_value == "your_api_key_here":
             console.print(f"[red]Error: Please set a valid value for {field_path}[/red]")
             sys.exit(1)
+
+
+def _validate_prompt_section(section: Dict[str, Any]) -> Dict[str, str]:
+    """Validate and normalize a single prompt section dict."""
+    if not isinstance(section, dict):
+        return {"text": str(section), "fg": "", "bg": ""}
+    return {
+        "text": str(section.get("text", "")),
+        "fg": str(section.get("fg", "")),
+        "bg": str(section.get("bg", "")),
+    }
+
+
+def _ensure_prompt_config(config: Dict[str, Any]) -> None:
+    """Ensure prompt config exists with valid defaults.
+    
+    Supports two config shapes:
+      1) A single 'prompt.sections' list (used for all modes)
+      2) Mode-specific overrides: 'prompt.ai', 'prompt.direct', 'prompt.incognito'
+    
+    Missing modes fall back to the built-in defaults from constants.py.
+    """
+    if "prompt" not in config:
+        config["prompt"] = {}
+
+    prompt_cfg = config["prompt"]
+
+    # If user provided a flat 'sections' list, treat it as the 'ai' mode prompt
+    # and replicate it to direct/incognito unless those already exist.
+    if "sections" in prompt_cfg and not isinstance(prompt_cfg["sections"], dict):
+        sections = [_validate_prompt_section(s) for s in prompt_cfg["sections"]]
+        prompt_cfg.setdefault("ai", sections)
+        prompt_cfg.setdefault("direct", sections)
+        prompt_cfg.setdefault("incognito", sections)
+    
+    # Ensure each mode has a valid list of sections
+    if "ai" not in prompt_cfg:
+        prompt_cfg["ai"] = [dict(s) for s in DEFAULT_PROMPT_SECTIONS]
+    else:
+        prompt_cfg["ai"] = [_validate_prompt_section(s) for s in prompt_cfg["ai"]]
+
+    if "direct" not in prompt_cfg:
+        prompt_cfg["direct"] = [dict(s) for s in DEFAULT_PROMPT_SECTIONS_DIRECT]
+    else:
+        prompt_cfg["direct"] = [_validate_prompt_section(s) for s in prompt_cfg["direct"]]
+
+    if "incognito" not in prompt_cfg:
+        prompt_cfg["incognito"] = [dict(s) for s in DEFAULT_PROMPT_SECTIONS_INCOGNITO]
+    else:
+        prompt_cfg["incognito"] = [_validate_prompt_section(s) for s in prompt_cfg["incognito"]]

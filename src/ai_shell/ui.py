@@ -105,6 +105,12 @@ Type your requests and I'll help you execute commands.
 • You can interrupt command execution with Ctrl+C
 • Conversations auto-save every 5 interactions
 • Previous conversations resume automatically on startup
+
+[yellow]Prompt Customization:[/yellow]
+• Edit the 'prompt' section in ~/.config/ai-shell/config.yaml
+• Define sections for each mode: ai, direct, incognito
+• Each section has: text, fg (text color), bg (background color)
+• Available variables: [green]$model[/green], [green]$dir[/green], [green]$mode[/green], [green]$user[/green], [green]$host[/green]
         """
         
         panel = Panel(

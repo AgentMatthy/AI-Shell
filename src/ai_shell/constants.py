@@ -150,3 +150,29 @@ DEFAULT_SAFE_COMMANDS = [
     # JSON/YAML processing (read-only)
     'jq', 'yq',
 ]
+
+# Default Prompt Configuration
+# Each section has: text (with $variables), fg (text color), bg (background color)
+# Available variables: $model, $dir, $mode, $user, $host
+DEFAULT_PROMPT_SECTIONS = [
+    {"text": "AI Shell ", "fg": "#0066cc", "bg": ""},
+    {"text": "[$mode - $model] ", "fg": "#0066cc", "bg": ""},
+    {"text": "$dir", "fg": "#666666", "bg": ""},
+    {"text": " > ", "fg": "#0066cc", "bg": ""},
+]
+
+# Mode-specific default prompt overrides (optional, keyed by mode name)
+# If a mode key exists here, its sections replace DEFAULT_PROMPT_SECTIONS for that mode
+DEFAULT_PROMPT_SECTIONS_DIRECT = [
+    {"text": "AI Shell ", "fg": "#00cc66", "bg": ""},
+    {"text": "[Direct] ", "fg": "#00cc66", "bg": ""},
+    {"text": "$dir", "fg": "#666666", "bg": ""},
+    {"text": " > ", "fg": "#00cc66", "bg": ""},
+]
+
+DEFAULT_PROMPT_SECTIONS_INCOGNITO = [
+    {"text": "AI Shell ", "fg": "#8b3fbb", "bg": ""},
+    {"text": "[Incognito - $model] ", "fg": "#8b3fbb", "bg": ""},
+    {"text": "$dir", "fg": "#666666", "bg": ""},
+    {"text": " > ", "fg": "#8b3fbb", "bg": ""},
+]
