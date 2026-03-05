@@ -366,13 +366,15 @@ The host OS is Linux - use appropriate Linux commands only.{additional_instructi
             
             with self.console.status(f"[bold accent_alt]Thinking...[/bold accent_alt]") as status:
                 for chunk in response:
-                    if chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        reply_chunk.append(content)
-                        full_reply += content
+                    if not chunk.choices:
+                        continue
+                    delta = chunk.choices[0].delta
+                    if delta.content:
+                        reply_chunk.append(delta.content)
+                        full_reply += delta.content
                     
-                    if hasattr(chunk.choices[0].delta, 'reasoning_content'):
-                        reasoning_content = getattr(chunk.choices[0].delta, 'reasoning_content', None)
+                    if hasattr(delta, 'reasoning_content'):
+                        reasoning_content = getattr(delta, 'reasoning_content', None)
                         if reasoning_content:
                             has_reasoning = True
                             reasoning_chunk.append(reasoning_content)
