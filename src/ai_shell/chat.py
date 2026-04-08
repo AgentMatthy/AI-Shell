@@ -118,7 +118,8 @@ Example usage:
 What is the recommended way to install Docker Engine on Ubuntu 24.04, including repository setup and prerequisites?
 ```"
 
-IMPORTANT: Like commands, use ONLY ONE web search block per response."""
+You may include multiple web search / command / context blocks in one response when they should run sequentially.
+They will execute top-to-bottom, one at a time."""
 
 # ------------------------- #
 
@@ -178,7 +179,7 @@ Rules:
 - The <prunable-messages> list below shows manageable messages with IDs and token sizes
 - Messages marked [truncated] have hidden content — use context_untruncate if needed
 - Messages marked [already distilled] are already condensed — prune them if no longer needed
-- Context management uses the same one-block-per-response rule as commands and searches
+- Context management can be combined with commands and web searches in the same response when the steps should happen sequentially
 - After managing context, you will automatically continue with your task
 - IMPORTANT: Your DEFAULT behavior after a command completes should be to manage its output, then continue. Do not skip this step.
 - REMEMBER: Always write a brief message explaining what you're doing when managing context — it will be shown to the user."""
@@ -220,17 +221,17 @@ RULES:
 2. Use ```websearch blocks ONLY for web searches when you need current information or precise instructions (like documentation)
 3. Use ```context_distill, ```context_prune, or ```context_untruncate blocks for managing conversation context
 4. You can mix explanations and commands/searches naturally in the same response
-5. Each command or search block should contain exactly one command or query
-6. CRITICAL: Use ONLY ONE command, search, OR context management block per response - NEVER multiple
-7. Always explain what the command or search will do
-8. After each command/search, wait to see the result before proceeding
-9. Execute commands/searches one at a time and analyze results before continuing
+5. Each command, search, or context block should contain exactly one action
+6. You MAY include multiple command/search/context blocks in a single response when they should be executed sequentially
+7. Blocks execute strictly in the order you write them, top-to-bottom
+8. Each command block gets its own user confirmation right before it runs; the next block will not start until the previous one finishes
+9. Always explain what the next action or sequence will do
 10. ALWAYS end your response with the appropriate tag: [QUESTION], [COMPLETE], or no tag
 
 COMMAND EXECUTION STRATEGY:
-- Execute EXACTLY ONE command OR search per response
-- Wait for the result before deciding on the next step
-- Analyze command/search output before proceeding
+- If you already know the correct ordered steps, you may emit a short sequential action plan in one response using multiple blocks
+- Use sequential blocks only when the order is clear and the later steps do not require re-planning based on unseen intermediate results
+- Never rely on parallel execution; action blocks run one-by-one in the order written
 - Never assume commands will succeed - always check results first
 
 INFORMATION GATHERING:

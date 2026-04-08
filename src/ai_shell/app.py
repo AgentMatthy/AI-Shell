@@ -43,6 +43,7 @@ class AIShellApp:
         self.rejudge_count = 0
         self.auto_approve_commands = False
         self.safe_commands: set = set(DEFAULT_SAFE_COMMANDS)
+        self._running_action_sequence = False
     
     def initialize(self):
         """Initialize all components"""
@@ -535,36 +536,79 @@ class AIShellApp:
             self._handle_empty_response()
             return
         
-        # Parse all block types from response
-        command_pattern = re.compile(r"```command\s*(.*?)\s*```", re.DOTALL)
-        websearch_pattern = re.compile(r"```websearch\s*(.*?)\s*```", re.DOTALL)
-        distill_pattern = re.compile(r"```context_distill\s*(.*?)\s*```", re.DOTALL)
-        prune_pattern = re.compile(r"```context_prune\s*(.*?)\s*```", re.DOTALL)
-        untruncate_pattern = re.compile(r"```context_untruncate\s*(.*?)\s*```", re.DOTALL)
-        
-        commands = command_pattern.findall(response)
-        websearches = websearch_pattern.findall(response)
-        distills = distill_pattern.findall(response)
-        prunes = prune_pattern.findall(response)
-        untruncates = untruncate_pattern.findall(response)
-        
-        # Check for multiple actions (commands + searches + context ops)
-        total_actions = len(commands) + len(websearches) + len(distills) + len(prunes) + len(untruncates)
-        
-        if total_actions > 1:
-            self._handle_multiple_actions_response(total_actions)
-        elif distills:
-            self._handle_context_distill(response, distills)
-        elif prunes:
-            self._handle_context_prune(response, prunes)
-        elif untruncates:
-            self._handle_context_untruncate(response, untruncates)
-        elif commands:
-            self._handle_command_response(response, commands)
-        elif websearches:
-            self._handle_websearch_response(response, websearches)
+        actions = self._extract_action_blocks(response)
+
+        if actions:
+            self._handle_action_sequence(response, actions)
         else:
             self._handle_text_response(response)
+
+    def _extract_action_blocks(self, response: str) -> List[Dict[str, Any]]:
+        """Extract supported action blocks in the order they appear."""
+        action_pattern = re.compile(
+            r"```(?P<type>command|websearch|context_distill|context_prune|context_untruncate)\s*(?P<content>.*?)\s*```",
+            re.DOTALL,
+        )
+
+        actions: List[Dict[str, Any]] = []
+        for match in action_pattern.finditer(response):
+            actions.append(
+                {
+                    "type": match.group("type"),
+                    "content": match.group("content").strip(),
+                    "start": match.start(),
+                    "end": match.end(),
+                }
+            )
+        return actions
+
+    def _strip_action_blocks_for_display(self, response: str) -> str:
+        """Remove action blocks from a response before displaying it."""
+        display_text = re.sub(
+            r"```(?:command|websearch|context_distill|context_prune|context_untruncate)\s*.*?\s*```",
+            "",
+            response,
+            flags=re.DOTALL,
+        )
+        return self.chat_manager.strip_response_tags_for_display(display_text).strip()
+
+    def _display_action_sequence_message(self, response: str):
+        """Display assistant prose for a response that includes action blocks."""
+        display_text = self._strip_action_blocks_for_display(response)
+        if display_text:
+            md = Markdown(display_text)
+            self.ui.console.print()
+            self.ui.console.print(self.ui.ai_panel(md))
+            self.ui.console.print()
+
+    def _handle_action_sequence(self, response: str, actions: List[Dict[str, Any]]):
+        """Handle one or more sequential action blocks from a single AI response."""
+        self.rejudge = False
+        self.rejudge_count = 0
+
+        self._display_action_sequence_message(response)
+
+        self._running_action_sequence = True
+        try:
+            for action in actions:
+                action_type = action["type"]
+                content = action["content"]
+
+                if action_type == "command":
+                    self._handle_command_response(content, display_response=False)
+                elif action_type == "websearch":
+                    self._handle_websearch_response(content, display_response=False)
+                elif action_type == "context_distill":
+                    self._handle_context_distill(content, display_response=False)
+                elif action_type == "context_prune":
+                    self._handle_context_prune(content, display_response=False)
+                elif action_type == "context_untruncate":
+                    self._handle_context_untruncate(content, display_response=False)
+
+                if not self._running_action_sequence:
+                    break
+        finally:
+            self._running_action_sequence = False
     
     def _handle_empty_response(self):
         """Handle empty AI response"""
@@ -590,26 +634,6 @@ class AIShellApp:
             self.context_manager.assign_metadata(msg, label="Empty response handling")
             self.rejudge = True
     
-    def _handle_multiple_actions_response(self, total_actions):
-        """Handle response with multiple commands/searches/context operations"""
-        assert self.chat_manager is not None
-        
-        self.ui.console.print(f"[error]Multiple actions detected ({total_actions} actions). Asking AI to correct.[/error]")
-        msg = {
-            "role": "user", 
-            "content": f"SYSTEM MESSAGE: You provided {total_actions} action blocks in one response, which is forbidden. You must provide EXACTLY ONE command, search, or context management block per response. Please choose the FIRST action you need to take and provide it alone with explanation."
-        }
-        self.chat_manager.payload.append(msg)
-        self.context_manager.assign_metadata(msg, label="Multiple actions error")
-        self.rejudge = True
-        self.rejudge_count += 1
-        if self.rejudge_count > 3:
-            self.ui.console.print(f"[error]Too many multiple action violations. Resetting conversation.[/error]")
-            self.chat_manager.clear_history()
-            self.context_manager.reset()
-            self.rejudge = False
-            self.rejudge_count = 0
-
     # ─── Context Management Handlers ───────────────────────────────────
 
     def _display_context_management_message(self, response):
@@ -626,18 +650,16 @@ class AIShellApp:
             self.ui.console.print(self.ui.ai_panel(md))
             self.ui.console.print()
 
-    def _handle_context_distill(self, response, distill_blocks):
-        """Handle response containing a context_distill block"""
+    def _handle_context_distill(self, block_content, display_response: bool = True):
+        """Handle a context_distill block."""
         assert self.chat_manager is not None
         assert self.context_manager is not None
         
         self.rejudge_count = 0
         
-        # Display the AI's accompanying message
-        self._display_context_management_message(response)
-        
-        # Parse the distill block
-        block_content = distill_blocks[0].strip()
+        if display_response:
+            self._display_context_management_message(block_content)
+
         msg_id, summary = self._parse_context_distill(block_content)
         
         if msg_id is not None and summary:
@@ -663,18 +685,16 @@ class AIShellApp:
             self.context_manager.assign_metadata(msg, label="Context management error")
             self.rejudge = True
     
-    def _handle_context_prune(self, response, prune_blocks):
-        """Handle response containing a context_prune block"""
+    def _handle_context_prune(self, block_content, display_response: bool = True):
+        """Handle a context_prune block."""
         assert self.chat_manager is not None
         assert self.context_manager is not None
         
         self.rejudge_count = 0
         
-        # Display the AI's accompanying message
-        self._display_context_management_message(response)
-        
-        # Parse the prune block
-        block_content = prune_blocks[0].strip()
+        if display_response:
+            self._display_context_management_message(block_content)
+
         msg_ids = self._parse_context_prune(block_content)
         
         if msg_ids:
@@ -699,18 +719,16 @@ class AIShellApp:
             self.context_manager.assign_metadata(msg, label="Context management error")
             self.rejudge = True
     
-    def _handle_context_untruncate(self, response, untruncate_blocks):
-        """Handle response containing a context_untruncate block"""
+    def _handle_context_untruncate(self, block_content, display_response: bool = True):
+        """Handle a context_untruncate block."""
         assert self.chat_manager is not None
         assert self.context_manager is not None
         
         self.rejudge_count = 0
         
-        # Display the AI's accompanying message
-        self._display_context_management_message(response)
-        
-        # Parse the untruncate block
-        block_content = untruncate_blocks[0].strip()
+        if display_response:
+            self._display_context_management_message(block_content)
+
         msg_id = self._parse_context_untruncate(block_content)
         
         if msg_id is not None:
@@ -790,46 +808,40 @@ class AIShellApp:
 
     # ─── Command & Search Handlers ─────────────────────────────────────
 
-    def _handle_command_response(self, response, commands):
-        """Handle response containing commands"""
+    def _handle_command_response(self, command, display_response: bool = True):
+        """Handle a command block."""
         assert self.chat_manager is not None
         
-        # Process single command
         self.rejudge = False
         self.rejudge_count = 0
-        
-        # Display response (strip tags for display while keeping original in payload)
-        display_response = self.chat_manager.strip_response_tags_for_display(response)
-        md = Markdown(display_response)
-        self.ui.console.print()
-        self.ui.console.print(self.ui.ai_panel(md))
-        self.ui.console.print()
-        
-        # Execute command
-        command = commands[0].strip()
+
+        if display_response:
+            display_text = self.chat_manager.strip_response_tags_for_display(command)
+            md = Markdown(display_text)
+            self.ui.console.print()
+            self.ui.console.print(self.ui.ai_panel(md))
+            self.ui.console.print()
+
         if not command:
             self.ui.console.print("[warning]Empty command block detected.[/warning]")
             return
         
         self._execute_command_with_confirmation(command)
 
-    def _handle_websearch_response(self, response, websearches):
-        """Handle response containing web searches"""
+    def _handle_websearch_response(self, query, display_response: bool = True):
+        """Handle a web search block."""
         assert self.chat_manager is not None
         
-        # Process single web search
         self.rejudge = False
         self.rejudge_count = 0
-        
-        # Display response (strip tags for display while keeping original in payload)
-        display_response = self.chat_manager.strip_response_tags_for_display(response)
-        md = Markdown(display_response)
-        self.ui.console.print()
-        self.ui.console.print(self.ui.ai_panel(md))
-        self.ui.console.print()
-        
-        # Execute web search
-        query = websearches[0].strip()
+
+        if display_response:
+            display_text = self.chat_manager.strip_response_tags_for_display(query)
+            md = Markdown(display_text)
+            self.ui.console.print()
+            self.ui.console.print(self.ui.ai_panel(md))
+            self.ui.console.print()
+
         if not query:
             self.ui.console.print("[warning]Empty web search block detected.[/warning]")
             return
@@ -888,31 +900,40 @@ class AIShellApp:
         """Execute command after user confirmation, auto-approving safe read-only commands"""
         assert self.chat_manager is not None
         
+        allow_auto_approve = not self._running_action_sequence
+
         # Skip confirmation if auto-approve is enabled (user pressed 'a' earlier)
-        if self.auto_approve_commands:
+        if allow_auto_approve and self.auto_approve_commands:
             self._execute_and_process_command(command)
             return
-        
-        # Auto-approve safe (read-only) commands without asking
-        if self.safe_commands and is_safe_command(command, self.safe_commands):
+
+        # Auto-approve safe (read-only) commands outside sequential multi-action mode
+        if allow_auto_approve and self.safe_commands and is_safe_command(command, self.safe_commands):
             cmd_display = command if len(command) <= 80 else command[:77] + "..."
             panel_content = f"[bold fg]Auto-executing safe command:[/bold fg]\n[accent]`{cmd_display}`[/accent]"
             self.ui.console.print(self.ui.ai_panel(panel_content, border_style=self.ui._t["success"], style=f"on {self.ui._t['block_alt']}"))
             self._execute_and_process_command(command)
             return
-        
+
         # Ask for confirmation for non-safe commands — command + prompt inside one panel
+        is_safe = self.safe_commands and is_safe_command(command, self.safe_commands)
+        safety_note = "\n[muted]Marked safe/read-only.[/muted]" if is_safe else ""
+        prompt_line = (
+            "[muted]\\[Y/Enter] Execute  \\[n] Decline[/muted]"
+            if self._running_action_sequence
+            else "[muted]\\[Y/Enter] Execute  \\[n] Decline  \\[a] Approve all[/muted]"
+        )
         panel_content = (
             f"[bold fg]Execute command:[/bold fg]\n"
-            f"[accent]`{command}`[/accent]\n\n"
-            f"[muted]\\[Y/Enter] Execute  \\[n] Decline  \\[a] Approve all[/muted]"
+            f"[accent]`{command}`[/accent]{safety_note}\n\n"
+            f"{prompt_line}"
         )
         self.ui.console.print(self.ui.ai_panel(panel_content, border_style=self.ui._t["warning"], style=f"on {self.ui._t['block_alt']}"))
         
         assert self.terminal_input is not None
         user_choice = self.terminal_input.get_instant_confirmation()
         
-        if user_choice == "a":
+        if user_choice == "a" and allow_auto_approve:
             self.auto_approve_commands = True
             self.ui.console.print("[success]Auto-approving all commands for this request[/success]")
             self._execute_and_process_command(command)
@@ -922,6 +943,8 @@ class AIShellApp:
             msg = {"role": "user", "content": f"SYSTEM MESSAGE: Tool use declined by user. The user chose not to execute: `{command}`"}
             self.chat_manager.payload.append(msg)
             self.context_manager.assign_metadata(msg, label=f"Declined: {cmd_label}")
+            self._running_action_sequence = False
+            self.rejudge = False
             # Don't set rejudge — return to user prompt so they can guide the conversation
         else:
             self._execute_and_process_command(command)
